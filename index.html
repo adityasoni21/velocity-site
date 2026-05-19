@@ -680,7 +680,7 @@
           </div>
           <div class="topbar-right">
             <span class="topbar-email" id="dash-email"></span>
-            <button class="btn-ghost" onclick="handleSignOut">Sign out</button>
+            <button class="btn-ghost" id="signout-btn">Sign out</button>
           </div>
         </header>
         <div class="dash-body">
@@ -910,6 +910,14 @@ window.addEventListener("DOMContentLoaded", function() {
   } else {
     show("auth");
   }
+
+  document.getElementById("signout-btn").addEventListener("click", function() {
+    localStorage.removeItem("v_token");
+    localStorage.removeItem("v_user");
+    state.token = null;
+    state.user = null;
+    show("auth")
+  })
 });
 
 // ── SCREEN ROUTER ──────────────────────────────
