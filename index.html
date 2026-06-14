@@ -1894,9 +1894,13 @@ function drawSkillMap() {
   SM.ctx    = canvas.getContext("2d");
   SM.dpr    = window.devicePixelRatio || 1;
  
-  var wrap = canvas.parentElement;
-  var W    = wrap.clientWidth;
-  var H    = 480;
+  var wrap      = canvas.parentElement;
+  var isMobile  = window.innerWidth < 600;
+ 
+  // On mobile: fixed 600px wide (scrollable), shorter height
+  // On desktop: fill container
+  var W = isMobile ? 600 : Math.max(wrap.clientWidth, 600);
+  var H = isMobile ? 420 : 480;
  
   canvas.width  = W * SM.dpr;
   canvas.height = H * SM.dpr;
@@ -1906,14 +1910,13 @@ function drawSkillMap() {
   SM.W = W;
   SM.H = H;
  
-  // Compute node positions from layout grid
-  var COLS   = 5;
-  var ROWS   = 6;
-  var padX   = 80;
-  var padY   = 50;
-  var cellW  = (W - padX * 2) / (COLS - 1);
-  var cellH  = (H - padY * 2) / (ROWS - 1);
-  var R      = 22;  // node circle radius
+  var COLS  = 5;
+  var ROWS  = 6;
+  var padX  = isMobile ? 55 : 80;
+  var padY  = isMobile ? 38 : 50;
+  var cellW = (W - padX * 2) / (COLS - 1);
+  var cellH = (H - padY * 2) / (ROWS - 1);
+  var R     = isMobile ? 18 : 22;
  
   SM.nodes = [];
   SM.edges = [];
@@ -1926,18 +1929,17 @@ function drawSkillMap() {
     var p = V_MASTERY_MAP[node.id] !== undefined ? V_MASTERY_MAP[node.id] : 0;
  
     SM.nodes.push({
-      id:           node.id,
-      name:         node.name,
-      x:            x,
-      y:            y,
-      p:            p,
-      category:     node.category,
+      id:            node.id,
+      name:          node.name,
+      x:             x,
+      y:             y,
+      p:             p,
+      category:      node.category,
       prerequisites: node.prerequisites || [],
-      difficulty:   node.difficulty,
-      r:            R,
+      difficulty:    node.difficulty,
+      r:             R,
     });
  
-    // Build edges from prerequisites
     (node.prerequisites || []).forEach(function(prereqId) {
       SM.edges.push({ from: prereqId, to: node.id });
     });
@@ -1945,17 +1947,28 @@ function drawSkillMap() {
  
   renderSkillMap();
  
-  // Click handler
-  canvas.onclick = function(e) {
-    var rect  = canvas.getBoundingClientRect();
-    var mx    = e.clientX - rect.left;
-    var my    = e.clientY - rect.top;
-    var hit   = null;
+  // Remove old listeners by cloning the canvas
+  var newCanvas = canvas.cloneNode(true);
+  canvas.parentNode.replaceChild(newCanvas, canvas);
+  SM.canvas = newCanvas;
+  SM.ctx    = newCanvas.getContext("2d");
+  SM.ctx.scale(SM.dpr, SM.dpr);
+ 
+  // Re-render on the new canvas
+  renderSkillMap();
+ 
+  newCanvas.onclick = function(e) {
+    var rect = newCanvas.getBoundingClientRect();
+    // Account for scroll position within the wrapper
+    var scaleX = SM.W / rect.width;
+    var mx = (e.clientX - rect.left) * scaleX;
+    var my = (e.clientY - rect.top)  * scaleX;
+    var hit = null;
  
     SM.nodes.forEach(function(n) {
       var dx = mx - n.x;
       var dy = my - n.y;
-      if (Math.sqrt(dx*dx + dy*dy) <= n.r + 4) hit = n;
+      if (Math.sqrt(dx*dx + dy*dy) <= n.r + 6) hit = n;
     });
  
     SM.selected = hit ? hit.id : null;
@@ -1963,16 +1976,16 @@ function drawSkillMap() {
     if (hit) showNodeDetail(hit);
   };
  
-  // Hover cursor
-  canvas.onmousemove = function(e) {
-    var rect = canvas.getBoundingClientRect();
-    var mx   = e.clientX - rect.left;
-    var my   = e.clientY - rect.top;
-    var over = SM.nodes.some(function(n) {
+  newCanvas.onmousemove = function(e) {
+    var rect  = newCanvas.getBoundingClientRect();
+    var scaleX = SM.W / rect.width;
+    var mx    = (e.clientX - rect.left) * scaleX;
+    var my    = (e.clientY - rect.top)  * scaleX;
+    var over  = SM.nodes.some(function(n) {
       var dx = mx - n.x, dy = my - n.y;
-      return Math.sqrt(dx*dx + dy*dy) <= n.r + 4;
+      return Math.sqrt(dx*dx + dy*dy) <= n.r + 6;
     });
-    canvas.style.cursor = over ? "pointer" : "default";
+    newCanvas.style.cursor = over ? "pointer" : "default";
   };
 }
  
