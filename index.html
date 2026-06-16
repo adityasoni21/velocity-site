@@ -548,25 +548,16 @@
       ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
       /* -- Progress Dashboard -------------------------------------------- */
-      .topbar-nav {
-        display: flex;
-        gap: 2px;
-        background: var(--muted2);
-        border-radius: 8px;
-        padding: 3px;
-        position: relative;
-      }
+      .topbar-nav { display: flex; gap: 2px; background: var(--muted2); border-radius: 8px; padding: 3px; }
       .nav-btn {
-        padding: 0.3rem 0.7rem;
+        padding: 0.35rem 0.9rem;
         border-radius: 6px;
-        font-size: 0.72rem;
+        font-size: 0.78rem;
         font-weight: 600;
         background: transparent;
         color: var(--muted);
-        transition: color 0.2s;
+        transition: all 0.15s;
         letter-spacing: 0.03em;
-        position: relative;
-        z-index: 1;
       }
       .nav-btn.active { background: var(--surface); color: var(--text); }
 
@@ -639,7 +630,7 @@
       .nd-pill { font-size: 0.72rem; padding: 3px 8px; border-radius: 4px; background: var(--muted2); color: var(--muted); font-family: var(--mono); }
       .nd-pill.prereq { background: #1a1a00; color: #a0a000; }
       .nd-pill.misconception { background: #200000; color: #a04040; }
-      .nd-insight { font-size: 0.82rem; color: var(--text); line-height: 1.6; padding: 0.75rem; background: var(--bg); border-radius: 8px; border-left: 2px solid var(--accent); word-break: break-word; overflow-wrap: break-word; white-space: normal; max-width: 100%; box-sizing: border-box; }
+      .nd-insight { font-size: 0.82rem; color: var(--text); line-height: 1.6; padding: 0.75rem; background: var(--bg); border-radius: 8px; border-left: 2px solid var(--accent); }
 
       .progress-section-title {
         font-size: 0.72rem;
@@ -669,6 +660,15 @@
       .topbar-logo {
         font-size: 1.1rem;
         flex-shrink: 0;
+      }
+      
+      .topbar-nav {
+        flex-shrink: 0;
+      }
+      
+      .nav-btn {
+        padding: 0.3rem 0.7rem;
+        font-size: 0.72rem;
       }
       
       .topbar-right {
@@ -924,40 +924,14 @@
       
       /* Skill map — scrollable on mobile */
       .skillmap-wrap {
-        position: relative;
-        width: 100%;
         overflow-x: auto;
-        overflow-y: hidden;
         -webkit-overflow-scrolling: touch;
         border-radius: 12px;
-        border: 1px solid var(--border);
-        background: var(--surface);
-        margin-bottom: 1.5rem;
-        /* Show scroll hint on mobile */
-        scroll-snap-type: x proximity;
-      }
-
-      .skillmap-wrap::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 40px;
-        height: 100%;
-        background: linear-gradient(to right, transparent, var(--surface));
-        pointer-events: none;
-        border-radius: 0 12px 12px 0;
-      }
-
-      @media (min-width: 700px) {
-        .skillmap-wrap::after { display: none; }
       }
       
       /* On mobile, canvas is wider than screen — user scrolls horizontally */
       #skillmap-canvas {
-        display: block;
-        min-width: 700px;
-        height: auto;
+        min-width: 600px;
       }
       
       .progress-section-title {
@@ -1793,9 +1767,10 @@ var V_SESSIONS = [];      // recent sessions
 function switchDashView(view) {
   var isProgress = view === "progress";
   document.getElementById("curriculum-container").classList.toggle("hidden", isProgress);
+  document.getElementById("progress-view").classList.toggle("hidden", !isProgress);
+  document.getElementById("nav-topics").classList.toggle("active", !isProgress);
   document.getElementById("nav-progress").classList.toggle("active", isProgress);
-  var statsRow = document.querySelector(".stats-row");
-  if (statsRow) statsRow.classList.toggle("hidden", isProgress);
+  document.querySelector(".stats-row").classList.toggle("hidden", isProgress)
 
   if (isProgress && V_CURRICULUM.length > 0) {
     renderProgressDashboard();
@@ -1913,50 +1888,35 @@ var NODE_LAYOUT = {
 };
  
 function drawSkillMap() {
-  var canvasEl = document.getElementById("skillmap-canvas");
-  if (!canvasEl) return;
- 
-  // Clone to remove old event listeners cleanly
-  var canvas = canvasEl.cloneNode(false);
-  canvasEl.parentNode.replaceChild(canvas, canvasEl);
- 
+  var canvas = document.getElementById("skillmap-canvas");
+  if (!canvas) return;
   SM.canvas = canvas;
   SM.ctx    = canvas.getContext("2d");
   SM.dpr    = window.devicePixelRatio || 1;
  
-  var wrap     = canvas.parentElement;
-  var isMobile = window.innerWidth < 700;
+  var wrap      = canvas.parentElement;
+  var isMobile  = window.innerWidth < 600;
  
-  // FIX 2+3: Fixed canvas dimensions that guarantee all nodes visible
-  // Width: always 700px minimum so right-side nodes never clip
-  // Height: 520px on mobile (was 420 — too short), 520 on desktop
-  var W = 700;
-  var H = isMobile ? 520 : 520;
+  // On mobile: fixed 600px wide (scrollable), shorter height
+  // On desktop: fill container
+  var W = isMobile ? 600 : Math.max(wrap.clientWidth, 600);
+  var H = isMobile ? 420 : 480;
  
-  // On desktop, expand to fill container if wider than 700
-  if (!isMobile && wrap.clientWidth > 700) {
-    W = wrap.clientWidth;
-  }
- 
-  canvas.width       = W * SM.dpr;
-  canvas.height      = H * SM.dpr;
-  canvas.style.width = W + "px";
+  canvas.width  = W * SM.dpr;
+  canvas.height = H * SM.dpr;
+  canvas.style.width  = W + "px";
   canvas.style.height = H + "px";
- 
   SM.ctx.scale(SM.dpr, SM.dpr);
   SM.W = W;
   SM.H = H;
  
-  // Layout constants
   var COLS  = 5;
   var ROWS  = 6;
-  var padX  = 70;
-  var padY  = 45;
-  // FIX 3: Extra bottom padding so last row labels don't clip
-  var padYBottom = 65;
+  var padX  = isMobile ? 55 : 80;
+  var padY  = isMobile ? 38 : 50;
   var cellW = (W - padX * 2) / (COLS - 1);
-  var cellH = (H - padY - padYBottom) / (ROWS - 1);
-  var R     = isMobile ? 20 : 22;
+  var cellH = (H - padY * 2) / (ROWS - 1);
+  var R     = isMobile ? 18 : 22;
  
   SM.nodes = [];
   SM.edges = [];
@@ -1987,57 +1947,46 @@ function drawSkillMap() {
  
   renderSkillMap();
  
-  // Touch + click handler with scroll offset correction
-  function getCanvasPos(e) {
-    var rect   = canvas.getBoundingClientRect();
-    var scaleX = SM.W / rect.width;
-    var scaleY = SM.H / rect.height;
-    var clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    var clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return {
-      x: (clientX - rect.left) * scaleX,
-      y: (clientY - rect.top)  * scaleY,
-    };
-  }
+  // Remove old listeners by cloning the canvas
+  var newCanvas = canvas.cloneNode(true);
+  canvas.parentNode.replaceChild(newCanvas, canvas);
+  SM.canvas = newCanvas;
+  SM.ctx    = newCanvas.getContext("2d");
+  SM.ctx.scale(SM.dpr, SM.dpr);
  
-  function handleHit(pos) {
+  // Re-render on the new canvas
+  renderSkillMap();
+ 
+  newCanvas.onclick = function(e) {
+    var rect = newCanvas.getBoundingClientRect();
+    // Account for scroll position within the wrapper
+    var scaleX = SM.W / rect.width;
+    var mx = (e.clientX - rect.left) * scaleX;
+    var my = (e.clientY - rect.top)  * scaleX;
     var hit = null;
+ 
     SM.nodes.forEach(function(n) {
-      var dx = pos.x - n.x;
-      var dy = pos.y - n.y;
-      if (Math.sqrt(dx*dx + dy*dy) <= n.r + 8) hit = n;
+      var dx = mx - n.x;
+      var dy = my - n.y;
+      if (Math.sqrt(dx*dx + dy*dy) <= n.r + 6) hit = n;
     });
+ 
     SM.selected = hit ? hit.id : null;
     renderSkillMap();
     if (hit) showNodeDetail(hit);
-  }
+  };
  
-  canvas.addEventListener("click", function(e) {
-    handleHit(getCanvasPos(e));
-  });
- 
-  // Touch tap support for mobile
-  var touchStartPos = null;
-  canvas.addEventListener("touchstart", function(e) {
-    touchStartPos = getCanvasPos(e);
-  }, { passive: true });
- 
-  canvas.addEventListener("touchend", function(e) {
-    if (!touchStartPos) return;
-    // Only treat as tap if finger didn't move much (not a scroll)
-    var endPos = { x: touchStartPos.x, y: touchStartPos.y };
-    handleHit(endPos);
-    touchStartPos = null;
-  }, { passive: true });
- 
-  canvas.addEventListener("mousemove", function(e) {
-    var pos  = getCanvasPos(e);
-    var over = SM.nodes.some(function(n) {
-      var dx = pos.x - n.x, dy = pos.y - n.y;
-      return Math.sqrt(dx*dx + dy*dy) <= n.r + 8;
+  newCanvas.onmousemove = function(e) {
+    var rect  = newCanvas.getBoundingClientRect();
+    var scaleX = SM.W / rect.width;
+    var mx    = (e.clientX - rect.left) * scaleX;
+    var my    = (e.clientY - rect.top)  * scaleX;
+    var over  = SM.nodes.some(function(n) {
+      var dx = mx - n.x, dy = my - n.y;
+      return Math.sqrt(dx*dx + dy*dy) <= n.r + 6;
     });
-    canvas.style.cursor = over ? "pointer" : "default";
-  });
+    newCanvas.style.cursor = over ? "pointer" : "default";
+  };
 }
  
 function renderSkillMap() {
@@ -2046,10 +1995,10 @@ function renderSkillMap() {
   var H   = SM.H;
   ctx.clearRect(0, 0, W, H);
  
+  // ── Draw edges ──
   var nodeById = {};
   SM.nodes.forEach(function(n) { nodeById[n.id] = n; });
  
-  // ── Draw edges ───────────────────────────────────
   SM.edges.forEach(function(edge) {
     var from = nodeById[edge.from];
     var to   = nodeById[edge.to];
@@ -2058,149 +2007,84 @@ function renderSkillMap() {
     var isHighlighted = SM.selected &&
       (edge.from === SM.selected || edge.to === SM.selected);
  
-    // FIX 4: Calculate the exact point on the circle's edge, not center
-    // Direction vector from 'from' center to 'to' center
-    var dx     = to.x - from.x;
-    var dy     = to.y - from.y;
-    var dist   = Math.sqrt(dx * dx + dy * dy);
-    if (dist === 0) return;
-    var ux = dx / dist;  // unit vector x
-    var uy = dy / dist;  // unit vector y
- 
-    // Start point: edge of 'from' circle
-    var startX = from.x + ux * from.r;
-    var startY = from.y + uy * from.r;
- 
-    // End point: edge of 'to' circle (where arrowhead tip should be)
-    var endX = to.x - ux * to.r;
-    var endY = to.y - uy * to.r;
- 
-    // Draw curved bezier between edge points
-    var midX = (startX + endX) / 2;
     ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.bezierCurveTo(midX, startY, midX, endY, endX, endY);
-    ctx.strokeStyle = isHighlighted ? "#c8f13566" : "#252525";
-    ctx.lineWidth   = isHighlighted ? 1.5 : 1;
+    ctx.moveTo(from.x, from.y);
+ 
+    // Curved bezier edge
+    var mx = (from.x + to.x) / 2;
+    ctx.bezierCurveTo(mx, from.y, mx, to.y, to.x, to.y);
+ 
+    ctx.strokeStyle = isHighlighted ? "#c8f13588" : "#2a2a2a";
+    ctx.lineWidth   = isHighlighted ? 2 : 1;
     ctx.stroke();
  
-    // FIX 4: Arrowhead drawn at endX, endY pointing in correct direction
-    var arrowLen   = 7;
-    var arrowAngle = 0.45;
-    var angle      = Math.atan2(endY - startY, endX - startX);
- 
+    // Arrow tip
+    var angle = Math.atan2(to.y - from.y, to.x - from.x);
+    var ax = to.x - Math.cos(angle) * (to.r + 2);
+    var ay = to.y - Math.sin(angle) * (to.r + 2);
     ctx.beginPath();
-    ctx.moveTo(endX, endY);
-    ctx.lineTo(
-      endX - arrowLen * Math.cos(angle - arrowAngle),
-      endY - arrowLen * Math.sin(angle - arrowAngle)
-    );
-    ctx.lineTo(
-      endX - arrowLen * Math.cos(angle + arrowAngle),
-      endY - arrowLen * Math.sin(angle + arrowAngle)
-    );
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - 8 * Math.cos(angle - 0.4), ay - 8 * Math.sin(angle - 0.4));
+    ctx.lineTo(ax - 8 * Math.cos(angle + 0.4), ay - 8 * Math.sin(angle + 0.4));
     ctx.closePath();
-    ctx.fillStyle = isHighlighted ? "#c8f13566" : "#2a2a2a";
+    ctx.fillStyle = isHighlighted ? "#c8f13588" : "#2a2a2a";
     ctx.fill();
   });
  
-  // ── Draw nodes ───────────────────────────────────
+  // ── Draw nodes ──
   SM.nodes.forEach(function(n) {
     var isSelected = SM.selected === n.id;
+    var info       = masteryInfo(n.p);
     var color      = CAT_COLORS[n.category] || "#888";
  
-    // Glow ring for selected
+    // Outer glow for selected
     if (isSelected) {
       ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r + 9, 0, Math.PI * 2);
-      ctx.fillStyle = color + "18";
-      ctx.fill();
- 
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r + 5, 0, Math.PI * 2);
-      ctx.fillStyle = color + "30";
+      ctx.arc(n.x, n.y, n.r + 8, 0, Math.PI * 2);
+      ctx.fillStyle = color + "22";
       ctx.fill();
     }
  
-    // Base circle fill
+    // Mastery fill ring (background circle)
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-    ctx.fillStyle = "#0e0e0e";
+    ctx.fillStyle = "#111";
     ctx.fill();
- 
-    // Mastery arc fill (pie wedge)
-    if (n.p > 0.01) {
-      ctx.beginPath();
-      ctx.moveTo(n.x, n.y);
-      ctx.arc(
-        n.x, n.y, n.r - 3,
-        -Math.PI / 2,
-        -Math.PI / 2 + n.p * Math.PI * 2
-      );
-      ctx.closePath();
-      ctx.fillStyle = color + (n.p >= 0.85 ? "dd" : "44");
-      ctx.fill();
-    }
- 
-    // Circle border
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-    ctx.strokeStyle = isSelected ? color : "#2e2e2e";
+    ctx.strokeStyle = isSelected ? color : "#333";
     ctx.lineWidth   = isSelected ? 2.5 : 1.5;
     ctx.stroke();
  
-    // Difficulty dots below circle
-    var dotCount  = n.difficulty;
-    var dotR      = 2;
-    var dotSpacing = 5;
-    var totalW    = (dotCount - 1) * dotSpacing;
-    for (var d = 0; d < dotCount; d++) {
+    // Mastery arc (filled portion)
+    if (n.p > 0) {
       ctx.beginPath();
-      ctx.arc(
-        n.x - totalW / 2 + d * dotSpacing,
-        n.y + n.r + 7,
-        dotR,
-        0, Math.PI * 2
-      );
-      ctx.fillStyle = isSelected ? color : "#383838";
+      ctx.moveTo(n.x, n.y);
+      ctx.arc(n.x, n.y, n.r - 3, -Math.PI / 2, -Math.PI / 2 + n.p * Math.PI * 2);
+      ctx.closePath();
+      ctx.fillStyle = color + (n.p >= 0.85 ? "cc" : "55");
       ctx.fill();
     }
  
-    // FIX 3: Label below node — two lines max, positioned with enough space
-    var labelY = n.y + n.r + 16;
-    ctx.textAlign    = "center";
+    // Difficulty dots at bottom of node
+    for (var d = 0; d < n.difficulty; d++) {
+      ctx.beginPath();
+      ctx.arc(n.x - (n.difficulty - 1) * 3 + d * 6, n.y + n.r + 6, 2, 0, Math.PI * 2);
+      ctx.fillStyle = isSelected ? color : "#444";
+      ctx.fill();
+    }
+ 
+    // Label below
+    ctx.font       = isSelected ? "bold 9px 'Syne', sans-serif" : "9px 'Syne', sans-serif";
+    ctx.fillStyle  = isSelected ? "#e8e8e8" : "#666";
+    ctx.textAlign  = "center";
     ctx.textBaseline = "top";
  
-    var words  = n.name.split(" ");
-    var line1, line2;
- 
-    // Smart line breaks based on word count
-    if (words.length <= 2) {
-      line1 = n.name;
-      line2 = null;
-    } else if (words.length === 3) {
-      line1 = words[0] + " " + words[1];
-      line2 = words[2];
-    } else {
-      line1 = words[0] + " " + words[1];
-      line2 = words.slice(2).join(" ");
-    }
- 
-    // Shadow for readability against complex backgrounds
-    ctx.shadowColor  = "#000000cc";
-    ctx.shadowBlur   = 4;
- 
-    ctx.font      = isSelected
-      ? "bold 8.5px 'Syne', system-ui, sans-serif"
-      : "8.5px 'Syne', system-ui, sans-serif";
-    ctx.fillStyle = isSelected ? "#e8e8e8" : "#555";
- 
+    // Wrap long names
+    var words    = n.name.split(" ");
+    var line1    = words.slice(0, 2).join(" ");
+    var line2    = words.slice(2).join(" ");
+    var labelY   = n.y + n.r + 12;
     ctx.fillText(line1, n.x, labelY);
-    if (line2) {
-      ctx.fillText(line2, n.x, labelY + 12);
-    }
- 
-    ctx.shadowBlur = 0;
+    if (line2) ctx.fillText(line2, n.x, labelY + 11);
   });
 }
  
