@@ -1527,7 +1527,7 @@ function confirmStartSession() {
   if (!state.selectedNode) return;
   var btn = document.getElementById("modal-start-btn");
   btn.disabled = true;
-  btn.textContent = "Starting...";
+  btn.textContent = "Starting... (may take 30s on first load)";
 
   api("/session/start", {
     method: "POST",
@@ -2091,6 +2091,10 @@ function renderSkillMap() {
 // ── NODE DETAIL PANEL ──────────────────────────
  
 function showNodeDetail(smNode) {
+  var content = document.getElementById("nd-content");
+  var empty = document.getElementById("nd-empty");
+
+  if (!empty || !content) return;
   // Find full node data from curriculum
   var fullNode = null;
   for (var i = 0; i < V_CURRICULUM.length; i++) {
