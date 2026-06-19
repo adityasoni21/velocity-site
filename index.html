@@ -1237,1059 +1237,1066 @@
     </div>
 
     <script>
-const API = "https://velocity-mvp-7ldo.onrender.com";
+      const API = "https://velocity-mvp-7ldo.onrender.com";
 
-// ── STATE ──────────────────────────────────────
-// Using var instead of let for top-level variables
-// to avoid temporal dead zone issues with extensions
-var V_AUTH_MODE = "signin";
+      // ── STATE ──────────────────────────────────────
+      // Using var instead of let for top-level variables
+      // to avoid temporal dead zone issues with extensions
+      var V_AUTH_MODE = "signin";
 
-var state = {
-  token: null,
-  user:  null,
-  session: null,
-  persona: "vector",
-  selectedNode: null,
-  exchangeCount: 0,
-  lastMastery: 0.10,
-};
+      var state = {
+        token: null,
+        user:  null,
+        session: null,
+        persona: "vector",
+        selectedNode: null,
+        exchangeCount: 0,
+        lastMastery: 0.10,
+      };
 
-// ── INIT — runs after full page load ───────────
-window.addEventListener("DOMContentLoaded", function() {
-  state.token = localStorage.getItem("v_token") || null;
-  try {
-    state.user = JSON.parse(localStorage.getItem("v_user") || "null");
-  } catch(e) {
-    state.user = null;
-  }
+      // ── INIT — runs after full page load ───────────
+      window.addEventListener("DOMContentLoaded", function() {
+        state.token = localStorage.getItem("v_token") || null;
+        try {
+          state.user = JSON.parse(localStorage.getItem("v_user") || "null");
+        } catch(e) {
+          state.user = null;
+        }
 
-  if (state.token && state.user) {
-    loadDashboard().catch(function(err) {
-      localStorage.clear()
-      state.token = null;
-      state.user = null
-      show("auth");
-    });
-  } else {
-    show("auth");
-  }
+        if (state.token && state.user) {
+          loadDashboard().catch(function(err) {
+            localStorage.clear()
+            state.token = null;
+            state.user = null
+            show("auth");
+          });
+        } else {
+          show("auth");
+        }
 
-  document.getElementById("signout-btn").addEventListener("click", function() {
-    localStorage.removeItem("v_token");
-    localStorage.removeItem("v_user");
-    state.token = null;
-    state.user = null;
-    show("auth")
-  })
-});
-
-// ── SCREEN ROUTER ──────────────────────────────
-function show(screenId) {
-  document.querySelectorAll(".screen").forEach(function(s) {
-    s.classList.remove("active");
-  });
-  document.getElementById("screen-" + screenId).classList.add("active");
-}
-
-// ── API HELPER ─────────────────────────────────
-function api(path, opts) {
-  opts = opts || {};
-  var headers = { "Content-Type": "application/json" };
-  if (state.token) headers["Authorization"] = "Bearer " + state.token;
-  return fetch(API + path, Object.assign({}, opts, { headers: headers }))
-    .then(function(res) {
-      return res.json().then(function(data) {
-        if (!res.ok) throw new Error(data.detail || data.error || "Request failed");
-        return data;
-      });
-    });
-}
-
-// ── MASTERY HELPERS ────────────────────────────
-function masteryInfo(p) {
-  if (p >= 0.85) return { label: "Mastered",    color: "#4ade80", cls: "badge-mastered" };
-  if (p >= 0.60) return { label: "Progressing", color: "#60a5fa", cls: "badge-progressing" };
-  if (p >= 0.30) return { label: "Learning",    color: "#fbbf24", cls: "badge-learning" };
-  return             { label: "Struggling",   color: "#f87171", cls: "badge-struggling" };
-}
-
-function diffLabel(d) {
-  return ["","Beginner","Easy","Medium","Hard","Expert"][d] || "";
-}
-
-function groupBy(arr, key) {
-  return arr.reduce(function(acc, item) {
-    var k = item[key] || "other";
-    if (!acc[k]) acc[k] = [];
-    acc[k].push(item);
-    return acc;
-  }, {});
-}
-
-var CAT_LABELS = {
-  foundations: "Foundations",
-  arrays: "Arrays & Strings",
-  searching: "Searching",
-  linked_lists: "Linked Lists",
-  trees: "Trees & Heaps",
-  graphs: "Graphs",
-  dynamic_programming: "Dynamic Programming",
-  recursion: "Recursion & Backtracking",
-  advanced: "Advanced",
-};
-
-// ══════════════════════════════════════════════
-//  AUTH
-// ══════════════════════════════════════════════
-function setAuthMode(mode) {
-  V_AUTH_MODE = mode;
-  var btns = document.querySelectorAll(".tab-btn");
-  btns[0].classList.toggle("active", mode === "signin");
-  btns[1].classList.toggle("active", mode === "signup");
-  document.getElementById("auth-btn").textContent =
-    mode === "signin" ? "Sign In" : "Create Account";
-  hideAuthError();
-}
-
-function showAuthError(msg) {
-  var el = document.getElementById("auth-error");
-  el.textContent = msg;
-  el.classList.remove("hidden");
-}
-
-function hideAuthError() {
-  document.getElementById("auth-error").classList.add("hidden");
-}
-
-function handleAuth() {
-  var email    = document.getElementById("auth-email").value.trim();
-  var password = document.getElementById("auth-password").value;
-
-  if (!email || !password) { showAuthError("Email and password are required."); return; }
-  if (password.length < 6) { showAuthError("Password must be at least 6 characters."); return; }
-
-  var btn = document.getElementById("auth-btn");
-  btn.disabled = true;
-  btn.textContent = "Please wait...";
-  hideAuthError();
-
-  var endpoint = V_AUTH_MODE === "signup" ? "/auth/signup" : "/auth/signin";
-
-  api(endpoint, {
-    method: "POST",
-    body: JSON.stringify({ email: email, password: password }),
-  })
-  .then(function(data) {
-    state.token = data.access_token;
-    state.user  = { user_id: data.user_id, email: data.email };
-    localStorage.setItem("v_token", state.token);
-    localStorage.setItem("v_user", JSON.stringify(state.user));
-    return loadDashboard();
-  })
-  .catch(function(err) {
-    showAuthError(err.message);
-    btn.disabled = false;
-    btn.textContent = V_AUTH_MODE === "signin" ? "Sign In" : "Create Account";
-  });
-}
-
-function handleSignOut() {
-  state.token = null;
-  state.user  = null;
-  localStorage.removeItem("v_token");
-  localStorage.removeItem("v_user");
-  show("auth");
-}
-
-// ══════════════════════════════════════════════
-//  DASHBOARD
-// ══════════════════════════════════════════════
-function loadDashboard() {
-  show("dashboard");
-  document.getElementById("dash-email").textContent = state.user ? state.user.email : "";
-  document.getElementById("curriculum-container").innerHTML =
-    "<p style='color:var(--muted);font-size:.85rem'>Loading curriculum...</p>";
-
-  return Promise.all([
-    api("/curriculum"),
-    api("/student/mastery"),
-    api("/student/next-node"),
-  ])
-  .then(function(results) {
-    var curriculumRes = results[0];
-    var masteryRes    = results[1];
-    var nextRes       = results[2];
-
-    var masteryMap = {};
-    masteryRes.mastery.forEach(function(m) {
-      masteryMap[m.node_id] = m.p_mastered;
-    });
-
-    var mastered = Object.values(masteryMap).filter(function(p) { return p >= 0.85; }).length;
-    var total    = curriculumRes.nodes.length;
-
-    document.getElementById("stat-mastered").textContent = mastered;
-    document.getElementById("stat-total").textContent    = "of " + total + " total";
-    document.getElementById("stat-sessions").textContent = masteryRes.mastery.length;
-    document.getElementById("stat-progress").textContent =
-      total > 0 ? Math.round(mastered / total * 100) + "%" : "0%";
-
-    var nextNodeId = nextRes.next_node ? nextRes.next_node.id : null;
-    var grouped    = groupBy(curriculumRes.nodes, "category");
-    var container  = document.getElementById("curriculum-container");
-    container.innerHTML = "";
-
-    Object.entries(grouped).forEach(function(entry) {
-      var cat   = entry[0];
-      var nodes = entry[1];
-
-      var section = document.createElement("div");
-      section.className = "category-section";
-
-      var catTitle = document.createElement("div");
-      catTitle.className = "category-title";
-      catTitle.textContent = CAT_LABELS[cat] || cat;
-      section.appendChild(catTitle);
-
-      var grid = document.createElement("div");
-      grid.className = "nodes-grid";
-
-      nodes.forEach(function(node) {
-        var p   = masteryMap[node.id] !== undefined ? masteryMap[node.id] : null;
-        var rec = node.id === nextNodeId;
-        var info = p !== null ? masteryInfo(p) : { label: "New", cls: "badge-new" };
-        var pct  = p !== null ? Math.round(p * 100) : 0;
-
-        var card = document.createElement("button");
-        card.className = "node-card" + (rec ? " recommended" : "");
-        card.onclick = function() { openModal(node, p); };
-        card.innerHTML =
-          (rec ? "<div class='rec-label'>★ Recommended next</div>" : "") +
-          "<div class='node-card-top'>" +
-            "<span class='node-name'>" + node.name + "</span>" +
-            "<span class='node-badge " + info.cls + "'>" + info.label + "</span>" +
-          "</div>" +
-          "<div class='node-diff'>" + diffLabel(node.difficulty) + "</div>" +
-          (p !== null
-            ? "<div class='mastery-bar-wrap'><div class='mastery-bar-fill' style='width:" + pct + "%'></div></div>"
-            : "");
-
-        grid.appendChild(card);
+        document.getElementById("signout-btn").addEventListener("click", function() {
+          localStorage.removeItem("v_token");
+          localStorage.removeItem("v_user");
+          state.token = null;
+          state.user = null;
+          show("auth")
+        })
       });
 
-      section.appendChild(grid);
-      container.appendChild(section);
-    });
-  })
-  .catch(function(err) {
-    if (err.message.indexOf("401") !== -1) {
-      handleSignOut();
-    } else {
-      document.getElementById("curriculum-container").innerHTML =
-        "<p style='color:#f87171;font-size:.85rem'>Error: " + err.message + "</p>";
-    }
-  });
-}
-
-// ── Modal ──────────────────────────────────────
-function openModal(node, currentMastery) {
-  state.selectedNode = node;
-  state.persona = "vector";
-
-  document.getElementById("modal-node-name").textContent = node.name;
-  document.getElementById("modal-node-meta").textContent =
-    diffLabel(node.difficulty) + " · " + node.category;
-
-  var warnEl = document.getElementById("modal-prereq-warn");
-  if (node.prerequisites && node.prerequisites.length > 0) {
-    warnEl.textContent = "Prerequisites: " + node.prerequisites.join(", ");
-    warnEl.classList.remove("hidden");
-  } else {
-    warnEl.classList.add("hidden");
-  }
-
-  selectPersona("vector");
-  document.getElementById("start-modal").classList.add("open");
-}
-
-function closeModal() {
-  document.getElementById("start-modal").classList.remove("open");
-  state.selectedNode = null;
-}
-
-function selectPersona(p) {
-  state.persona = p;
-  document.getElementById("persona-vector").classList.toggle("selected", p === "vector");
-  document.getElementById("persona-aura").classList.toggle("selected", p === "aura");
-}
-
-function confirmStartSession() {
-  if (!state.selectedNode) return;
-  var btn = document.getElementById("modal-start-btn");
-  btn.disabled = true;
-  btn.textContent = "Starting... (may take 30s on first load)";
-
-  api("/session/start", {
-    method: "POST",
-    body: JSON.stringify({ node_id: state.selectedNode.id, persona: state.persona }),
-  })
-  .then(function(res) {
-    state.session = res;
-    state.exchangeCount = 0;
-    state.lastMastery = 0.10;
-    closeModal();
-    openSession(res);
-  })
-  .catch(function(err) {
-    alert(err.message);
-    btn.disabled = false;
-    btn.textContent = "Start Session →";
-  });
-}
-
-// ══════════════════════════════════════════════
-//  SESSION / CHAT
-// ══════════════════════════════════════════════
-function openSession(sessionData) {
-  show("session");
-  document.getElementById("session-topic-name").textContent = sessionData.node_name;
-  updateSessionMeta();
-  updateMasteryStrip(0.10, "—");
-  document.getElementById("escalation-banner").classList.add("hidden");
-  document.getElementById("messages-inner").innerHTML = "";
-
-  if (sessionData.prereq_warning) {
-    var banner = document.getElementById("escalation-banner");
-    banner.textContent = "⚠ " + sessionData.prereq_warning;
-    banner.classList.remove("hidden");
-  }
-
-  appendMessage("ai", sessionData.opening_question, "PROBE", null);
-  setTimeout(function() { document.getElementById("msg-input").focus(); }, 100);
-}
-
-function updateSessionMeta() {
-  var personaName = state.persona === "vector" ? "⚡ Vector" : "🌊 Aura";
-  document.getElementById("session-meta-text").textContent =
-    personaName + " · " + state.exchangeCount + " exchanges";
-}
-
-function updateMasteryStrip(p, label) {
-  var pct = Math.round(p * 100);
-  document.getElementById("mastery-fill").style.width = pct + "%";
-  var info = masteryInfo(p);
-  var txt  = label !== "—" ? pct + "% · " + label : "—";
-  var el   = document.getElementById("mastery-pct-text");
-  el.textContent = txt;
-  el.style.color = label !== "—" ? info.color : "var(--muted)";
-}
-
-function appendMessage(role, text, phase, misconception) {
-  var wrap    = document.getElementById("messages-inner");
-  var isAI    = role === "ai";
-  var initial = isAI
-    ? (state.persona === "vector" ? "V" : "A")
-    : (state.user && state.user.email ? state.user.email[0].toUpperCase() : "U");
-
-  var div = document.createElement("div");
-  div.className = "msg " + role;
-  div.innerHTML =
-    "<div class='msg-avatar'>" + initial + "</div>" +
-    "<div class='msg-content'>" +
-      "<div class='msg-bubble'>" + text + "</div>" +
-      (isAI && phase
-        ? "<div class='msg-meta'>" +
-            "<span class='phase-tag'>" + phase + "</span>" +
-            (misconception ? "<span class='misconception-tag'>⚠ " + misconception + "</span>" : "") +
-          "</div>"
-        : "") +
-    "</div>";
-
-  wrap.appendChild(div);
-  scrollToBottom();
-}
-
-function showTyping() {
-  var wrap = document.getElementById("messages-inner");
-  var div  = document.createElement("div");
-  div.className = "typing";
-  div.id = "typing-indicator";
-  div.innerHTML =
-    "<div class='msg-avatar' style='background:var(--surface);border:1px solid var(--border2);color:var(--accent)'>" +
-      (state.persona === "vector" ? "V" : "A") +
-    "</div>" +
-    "<div class='typing-dots'>" +
-      "<div class='dot'></div><div class='dot'></div><div class='dot'></div>" +
-    "</div>";
-  wrap.appendChild(div);
-  scrollToBottom();
-}
-
-function hideTyping() {
-  var el = document.getElementById("typing-indicator");
-  if (el) el.remove();
-}
-
-function scrollToBottom() {
-  var wrap = document.getElementById("messages-wrap");
-  wrap.scrollTop = wrap.scrollHeight;
-}
-
-function handleSend() {
-  var input = document.getElementById("msg-input");
-  var text  = input.value.trim();
-  if (!text || !state.session) return;
-
-  input.value = "";
-  input.style.height = "44px";
-  document.getElementById("send-btn").disabled = true;
-
-  appendMessage("user", text, null, null);
-  showTyping();
-
-  api("/chat", {
-    method: "POST",
-    body: JSON.stringify({
-      session_id: state.session.session_id,
-      message: text,
-      persona: state.persona,
-    }),
-  })
-  .then(function(res) {
-    hideTyping();
-    appendMessage("ai", res.response, res.phase, res.misconception_detected);
-
-    state.lastMastery = res.mastery.p_mastered;
-    var info = masteryInfo(res.mastery.p_mastered);
-    updateMasteryStrip(res.mastery.p_mastered, info.label);
-
-    state.exchangeCount = res.exchange_count;
-    updateSessionMeta();
-
-    if (res.escalate_to_node) {
-      var banner = document.getElementById("escalation-banner");
-      banner.textContent = "⚠ You may need to review \"" + res.escalate_to_node + "\" first.";
-      banner.classList.remove("hidden");
-    }
-  })
-  .catch(function(err) {
-    hideTyping();
-    appendMessage("ai", "Error: " + err.message, null, null);
-  })
-  .finally(function() {
-    document.getElementById("send-btn").disabled = false;
-    document.getElementById("msg-input").focus();
-  });
-}
-
-function handleInputKey(e) {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    handleSend();
-  }
-}
-
-function autoResize(el) {
-  el.style.height = "auto";
-  el.style.height = Math.min(el.scrollHeight, 120) + "px";
-}
-
-function handleEndSession() {
-  if (!state.session) return;
-  var btn = document.getElementById("end-btn");
-  btn.disabled = true;
-  btn.textContent = "Ending...";
-
-  api("/session/end", {
-    method: "POST",
-    body: JSON.stringify({ session_id: state.session.session_id }),
-  })
-  .then(function() {
-    return api("/session/" + state.session.session_id + "/summary");
-  })
-  .then(function(summary) {
-    showSummary(summary);
-  })
-  .catch(function(err) {
-    alert(err.message);
-    btn.disabled = false;
-    btn.textContent = "End Session";
-  });
-}
-
-function goToDashboard() {
-  state.session = null;
-  loadDashboard();
-}
-
-// ══════════════════════════════════════════════
-//  SUMMARY
-// ══════════════════════════════════════════════
-function showSummary(summary) {
-  show("summary");
-
-  var p    = state.lastMastery;
-  var info = masteryInfo(p);
-  var pct  = Math.round(p * 100);
-  var emoji = p >= 0.85 ? "🎯" : p >= 0.60 ? "📈" : "💪";
-
-  document.getElementById("summary-emoji").textContent       = emoji;
-  document.getElementById("summary-title").textContent       = summary.node_name;
-  document.getElementById("summary-sub").textContent         = summary.node_id + " · " + state.persona;
-  document.getElementById("sum-exchanges").textContent       = summary.total_exchanges;
-  document.getElementById("sum-phase").textContent           = summary.final_phase;
-  document.getElementById("sum-gaps").textContent            = (summary.misconceptions_identified || []).length;
-  document.getElementById("sum-mastery-label").textContent   = info.label;
-  document.getElementById("sum-mastery-pct").textContent     = pct + "%";
-  document.getElementById("sum-mastery-fill").style.width    = pct + "%";
-
-  var items = summary.misconceptions_identified || [];
-  var card  = document.getElementById("misconceptions-card");
-  var list  = document.getElementById("misconception-list");
-
-  if (items.length === 0) {
-    card.classList.add("hidden");
-  } else {
-    card.classList.remove("hidden");
-    list.innerHTML = items.map(function(m) {
-      return "<li class='misconception-item'>" + m + "</li>";
-    }).join("");
-  }
-}
-// ===============================================================
-// DASHBOARD VIEW SWITCHER
-// ===============================================================
-
-var V_CURRICULUM = [];    // full node list cached after first load
-var V_MASTERY_MAP = {};   // {node_id: p_mastered}
-var V_SESSIONS = [];      // recent sessions
-
-function switchDashView(view) {
-  var isProgress = view === "progress";
-  document.getElementById("curriculum-container").classList.toggle("hidden", isProgress);
-  document.getElementById("progress-view").classList.toggle("hidden", !isProgress);
-  document.getElementById("nav-topics").classList.toggle("active", !isProgress);
-  document.getElementById("nav-progress").classList.toggle("active", isProgress);
-  document.querySelector(".stats-row").classList.toggle("hidden", isProgress)
-
-  if (isProgress && V_CURRICULUM.length > 0) {
-    renderProgressDashboard();
-  }
-}
-
-// Hook into existing loadDashboard to cache data
-var _origLoadDashboard = loadDashboard;
-loadDashboard = function() {
-  return _origLoadDashboard.apply(this, arguments).then(function() {
-    // Cache is populated inside renderProgressDashboard on first call
-  });
-};
-
-// ===================================================================
-// PROGRESS DASHBOARD RENDERER
-// ===================================================================
-
-function renderProgressDashboard() {
-  renderCategoryBars();
-  drawSkillMap();
-}
-
-// --- CATEGORY WEAKNESS BARS -------------------
-var CAT_COLORS = {
-  foundations:         "#c8f135",
-  arrays:              "#60a5fa",
-  searching:           "#f59e0b",
-  linked_lists:        "#a78bfa",
-  trees:               "#34d399",
-  graphs:              "#f87171",
-  dynamic_programming: "#fb923c",
-  recursion:           "#e879f9",
-  advanced:            "#94a3b8"
-};
-
-function renderCategoryBars() {
-  // Group nodes by category and compute average mastery
-  var catData = {};
-  V_CURRICULUM.forEach(function(node) {
-    var cat = node.category || "other";
-    if (!catData[cat]) catData[cat] = { total: 0, count: 0, name: CAT_LABELS[cat] || cat };
-    var p = V_MASTERY_MAP[node.id] !== undefined ? V_MASTERY_MAP[node.id] : 0;
-    catData[cat].total += p;
-    catData[cat].count += 1;
-  });
-
-  // Sort by average mastery ascending (weakest first)
-  var sorted = Object.entries(catData).sort(function(a, b) {
-    return (a[1].total / a[1].count) - (b[1].total / b[1].count);
-  });
-
-  var container = document.getElementById("cat-bars-container");
-  container.innerHTML = "";
-
-  sorted.forEach(function(entry) {
-    var cat = entry[0];
-    var data = entry[1];
-    var avg = data.count > 0 ? data.total / data.count : 0;
-    var pct = Math.round(avg * 100);
-    var color = CAT_COLORS[cat] || "#888";
-
-    var row = document.createElement("div");
-    row.className = "cat-bar-row";
-    row.innerHTML = 
-      "<div class='cat-bar-header'>" + 
-        "<span class='cat-bar-name'>" + data.name + "</span>" + 
-        "<span class='cat-bar-pct'>" + pct + "%</span>" +
-      "</div>" +
-      "<div class='cat-bar-track'>" + 
-        "<div class='cat-bar-fill' style='width:" + pct + "%;background:" + color + "'></div>" + 
-      "</div>";
-    container.appendChild(row);
-  });
-}
-
-// --- SKILL MAP (CANVAS) ------------------------------------
-
-var SM = {
-  nodes: [],
-  edges: [],
-  selected: null,
-  canvas: null,
-  ctx: null,
-  dpr: 1,
-  W: 0,
-  H: 0
-};
-
-// Fixed layout positions for 18 nodes - organized left→right by dependency depth
-var NODE_LAYOUT = {
-  // Depth 0 — foundations
-  "arrays_basics":           { col: 0, row: 1 },
-  // Depth 1
-  "hashing":                 { col: 1, row: 0 },
-  "two_pointers":            { col: 1, row: 1 },
-  "binary_search":           { col: 1, row: 2 },
-  "linked_list":             { col: 1, row: 3 },
-  "tree_traversal":          { col: 1, row: 4 },
-  // Depth 2
-  "sliding_window_fixed":    { col: 2, row: 0 },
-  "sliding_window_variable": { col: 2, row: 1 },
-  "bst":                     { col: 2, row: 3 },
-  "heap":                    { col: 2, row: 4 },
-  "dp_1d":                   { col: 2, row: 5 },
-  // Depth 3
-  "graph_bfs_dfs":           { col: 3, row: 1 },
-  "backtracking":            { col: 3, row: 3 },
-  "dp_2d":                   { col: 3, row: 5 },
-  // Depth 4
-  "topological_sort":        { col: 4, row: 0 },
-  "dijkstra":                { col: 4, row: 2 },
-  "union_find":              { col: 4, row: 3 },
-  "trie":                    { col: 4, row: 4 },
-};
- 
-function drawSkillMap() {
-  var canvas = document.getElementById("skillmap-canvas");
-  if (!canvas) return;
-  SM.canvas = canvas;
-  SM.ctx    = canvas.getContext("2d");
-  SM.dpr    = window.devicePixelRatio || 1;
- 
-  var wrap      = canvas.parentElement;
-  var isMobile  = window.innerWidth < 600;
- 
-  // On mobile: fixed 600px wide (scrollable), shorter height
-  // On desktop: fill container
-  var W = isMobile ? 600 : Math.max(wrap.clientWidth, 600);
-  var H = isMobile ? 420 : 480;
- 
-  canvas.width  = W * SM.dpr;
-  canvas.height = H * SM.dpr;
-  canvas.style.width  = W + "px";
-  canvas.style.height = H + "px";
-  SM.ctx.scale(SM.dpr, SM.dpr);
-  SM.W = W;
-  SM.H = H;
- 
-  var COLS  = 5;
-  var ROWS  = 6;
-  var padX  = isMobile ? 55 : 80;
-  var padY  = isMobile ? 38 : 50;
-  var cellW = (W - padX * 2) / (COLS - 1);
-  var cellH = (H - padY * 2) / (ROWS - 1);
-  var R     = isMobile ? 18 : 22;
- 
-  SM.nodes = [];
-  SM.edges = [];
- 
-  V_CURRICULUM.forEach(function(node) {
-    var layout = NODE_LAYOUT[node.id];
-    if (!layout) return;
-    var x = padX + layout.col * cellW;
-    var y = padY + layout.row * cellH;
-    var p = V_MASTERY_MAP[node.id] !== undefined ? V_MASTERY_MAP[node.id] : 0;
- 
-    SM.nodes.push({
-      id:            node.id,
-      name:          node.name,
-      x:             x,
-      y:             y,
-      p:             p,
-      category:      node.category,
-      prerequisites: node.prerequisites || [],
-      difficulty:    node.difficulty,
-      r:             R,
-    });
- 
-    (node.prerequisites || []).forEach(function(prereqId) {
-      SM.edges.push({ from: prereqId, to: node.id });
-    });
-  });
- 
-  renderSkillMap();
- 
-  // Remove old listeners by cloning the canvas
-  var newCanvas = canvas.cloneNode(true);
-  canvas.parentNode.replaceChild(newCanvas, canvas);
-  SM.canvas = newCanvas;
-  SM.ctx    = newCanvas.getContext("2d");
-  SM.ctx.scale(SM.dpr, SM.dpr);
- 
-  // Re-render on the new canvas
-  renderSkillMap();
- 
-  newCanvas.onclick = function(e) {
-    var rect = newCanvas.getBoundingClientRect();
-    // Account for scroll position within the wrapper
-    var scaleX = SM.W / rect.width;
-    var mx = (e.clientX - rect.left) * scaleX;
-    var my = (e.clientY - rect.top)  * scaleX;
-    var hit = null;
- 
-    SM.nodes.forEach(function(n) {
-      var dx = mx - n.x;
-      var dy = my - n.y;
-      if (Math.sqrt(dx*dx + dy*dy) <= n.r + 6) hit = n;
-    });
- 
-    SM.selected = hit ? hit.id : null;
-    renderSkillMap();
-    if (hit) showNodeDetail(hit);
-  };
- 
-  newCanvas.onmousemove = function(e) {
-    var rect  = newCanvas.getBoundingClientRect();
-    var scaleX = SM.W / rect.width;
-    var mx    = (e.clientX - rect.left) * scaleX;
-    var my    = (e.clientY - rect.top)  * scaleX;
-    var over  = SM.nodes.some(function(n) {
-      var dx = mx - n.x, dy = my - n.y;
-      return Math.sqrt(dx*dx + dy*dy) <= n.r + 6;
-    });
-    newCanvas.style.cursor = over ? "pointer" : "default";
-  };
-}
- 
-function renderSkillMap() {
-  var ctx = SM.ctx;
-  var W   = SM.W;
-  var H   = SM.H;
-  ctx.clearRect(0, 0, W, H);
- 
-  // ── Draw edges ──
-  var nodeById = {};
-  SM.nodes.forEach(function(n) { nodeById[n.id] = n; });
- 
-  SM.edges.forEach(function(edge) {
-    var from = nodeById[edge.from];
-    var to   = nodeById[edge.to];
-    if (!from || !to) return;
- 
-    var isHighlighted = SM.selected &&
-      (edge.from === SM.selected || edge.to === SM.selected);
- 
-    ctx.beginPath();
-    ctx.moveTo(from.x, from.y);
- 
-    // Curved bezier edge
-    var mx = (from.x + to.x) / 2;
-    ctx.bezierCurveTo(mx, from.y, mx, to.y, to.x, to.y);
- 
-    ctx.strokeStyle = isHighlighted ? "#c8f13588" : "#2a2a2a";
-    ctx.lineWidth   = isHighlighted ? 2 : 1;
-    ctx.stroke();
- 
-    // Arrow tip
-    var angle = Math.atan2(to.y - from.y, to.x - from.x);
-    var ax = to.x - Math.cos(angle) * (to.r + 2);
-    var ay = to.y - Math.sin(angle) * (to.r + 2);
-    ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(ax - 8 * Math.cos(angle - 0.4), ay - 8 * Math.sin(angle - 0.4));
-    ctx.lineTo(ax - 8 * Math.cos(angle + 0.4), ay - 8 * Math.sin(angle + 0.4));
-    ctx.closePath();
-    ctx.fillStyle = isHighlighted ? "#c8f13588" : "#2a2a2a";
-    ctx.fill();
-  });
- 
-  // ── Draw nodes ──
-  SM.nodes.forEach(function(n) {
-    var isSelected = SM.selected === n.id;
-    var info       = masteryInfo(n.p);
-    var color      = CAT_COLORS[n.category] || "#888";
- 
-    // Outer glow for selected
-    if (isSelected) {
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r + 8, 0, Math.PI * 2);
-      ctx.fillStyle = color + "22";
-      ctx.fill();
-    }
- 
-    // Mastery fill ring (background circle)
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-    ctx.fillStyle = "#111";
-    ctx.fill();
-    ctx.strokeStyle = isSelected ? color : "#333";
-    ctx.lineWidth   = isSelected ? 2.5 : 1.5;
-    ctx.stroke();
- 
-    // Mastery arc (filled portion)
-    if (n.p > 0) {
-      ctx.beginPath();
-      ctx.moveTo(n.x, n.y);
-      ctx.arc(n.x, n.y, n.r - 3, -Math.PI / 2, -Math.PI / 2 + n.p * Math.PI * 2);
-      ctx.closePath();
-      ctx.fillStyle = color + (n.p >= 0.85 ? "cc" : "55");
-      ctx.fill();
-    }
- 
-    // Difficulty dots at bottom of node
-    for (var d = 0; d < n.difficulty; d++) {
-      ctx.beginPath();
-      ctx.arc(n.x - (n.difficulty - 1) * 3 + d * 6, n.y + n.r + 6, 2, 0, Math.PI * 2);
-      ctx.fillStyle = isSelected ? color : "#444";
-      ctx.fill();
-    }
- 
-    // Label below
-    ctx.font       = isSelected ? "bold 9px 'Syne', sans-serif" : "9px 'Syne', sans-serif";
-    ctx.fillStyle  = isSelected ? "#e8e8e8" : "#666";
-    ctx.textAlign  = "center";
-    ctx.textBaseline = "top";
- 
-    // Wrap long names
-    var words    = n.name.split(" ");
-    var line1    = words.slice(0, 2).join(" ");
-    var line2    = words.slice(2).join(" ");
-    var labelY   = n.y + n.r + 12;
-    ctx.fillText(line1, n.x, labelY);
-    if (line2) ctx.fillText(line2, n.x, labelY + 11);
-  });
-}
- 
-// ── NODE DETAIL PANEL ──────────────────────────
- 
-function showNodeDetail(smNode) {
-  var content = document.getElementById("nd-content");
-  var empty = document.getElementById("nd-empty");
-
-  if (!empty || !content) return;
-  // Find full node data from curriculum
-  var fullNode = null;
-  for (var i = 0; i < V_CURRICULUM.length; i++) {
-    if (V_CURRICULUM[i].id === smNode.id) { fullNode = V_CURRICULUM[i]; break; }
-  }
- 
-  document.getElementById("nd-empty").classList.add("hidden");
-  var content = document.getElementById("nd-content");
-  content.classList.remove("hidden");
- 
-  var p    = V_MASTERY_MAP[smNode.id] !== undefined ? V_MASTERY_MAP[smNode.id] : 0;
-  var info = masteryInfo(p);
-  var pct  = Math.round(p * 100);
- 
-  document.getElementById("nd-name").textContent = smNode.name;
-  document.getElementById("nd-meta").textContent =
-    diffLabel(smNode.difficulty) + " · " + smNode.category;
- 
-  // Mastery mini bar
-  document.getElementById("nd-mastery").innerHTML =
-    "<div style='display:flex;justify-content:space-between;margin-bottom:4px'>" +
-      "<span style='font-size:.75rem;color:" + info.color + ";font-weight:600'>" + info.label + "</span>" +
-      "<span style='font-size:.72rem;font-family:var(--mono);color:var(--muted)'>" + pct + "%</span>" +
-    "</div>" +
-    "<div style='height:4px;background:var(--muted2);border-radius:2px;overflow:hidden'>" +
-      "<div style='height:100%;width:" + pct + "%;background:" + info.color + ";border-radius:2px'></div>" +
-    "</div>";
- 
-  // Target insight — use knowledge graph data baked into curriculum
-  // Since we only get id/name/category/difficulty/prerequisites from /curriculum,
-  // show a motivating message based on mastery status
-  var insightMap = {
-    "arrays_basics":           "Array operations have different costs at different positions; random access is O(1) but mutation is O(n).",
-    "hashing":                 "Trading space for time: a hash map converts an O(n) search into amortized O(1) at the cost of O(n) space.",
-    "two_pointers":            "Two pointers eliminate the inner loop by using sortedness to make a greedy pointer-movement decision at each step.",
-    "sliding_window_fixed":    "A fixed window slides in O(n) by incrementally updating state rather than recomputing, turning O(n×k) into O(n).",
-    "sliding_window_variable": "The window invariant drives everything: define what makes a window valid, expand greedily, shrink only when the invariant breaks.",
-    "binary_search":           "Binary search works on any monotonic decision function — the key is identifying what property lets you eliminate half the search space.",
-    "linked_list":             "Most linked list problems reduce to careful pointer manipulation; the dummy head node eliminates special-casing the head.",
-    "tree_traversal":          "Traversal order determines what information is available when you process a node; inorder gives sorted order for BSTs.",
-    "bst":                     "BST gives O(log n) search only when balanced; inorder traversal always yields sorted output.",
-    "heap":                    "A heap of size k gives you the k-th order statistic in O(n log k); the two-heap pattern maintains a dynamic median.",
-    "graph_bfs_dfs":           "BFS guarantees shortest path in unweighted graphs because it explores layer by layer; DFS is better for exhaustive path exploration.",
-    "topological_sort":        "Topological sort imposes an ordering on a DAG — Kahn's does this by repeatedly removing zero in-degree nodes.",
-    "dijkstra":                "Dijkstra is greedy BFS with a min-heap: always extend the cheapest known path, relying on non-negative weights.",
-    "dp_1d":                   "DP works when a problem has optimal substructure: the optimal solution to the whole is built from optimal solutions to sub-problems.",
-    "dp_2d":                   "2D DP extends 1D by adding a second axis to the state — usually a second sequence, a capacity, or a constraint.",
-    "backtracking":            "Backtracking is a systematic decision-tree search with undo; pruning is the only thing that separates it from brute force.",
-    "union_find":              "Union-Find gives near-O(1) connectivity queries; path compression + union by rank together achieve amortized O(α(n)).",
-    "trie":                    "A trie trades O(n) space for O(L) time on all string operations, and uniquely supports prefix queries hash maps can't do efficiently.",
-  };
- 
-  document.getElementById("nd-insight").textContent =
-    insightMap[smNode.id] || "Start a session to unlock the target insight for this topic.";
- 
-  // Prerequisites
-  var prereqsEl = document.getElementById("nd-prereqs");
-  prereqsEl.innerHTML = "";
-  if (smNode.prerequisites && smNode.prerequisites.length > 0) {
-    smNode.prerequisites.forEach(function(pid) {
-      var pill = document.createElement("span");
-      pill.className = "nd-pill prereq";
-      var pNode = null;
-      for (var i = 0; i < V_CURRICULUM.length; i++) {
-        if (V_CURRICULUM[i].id === pid) { pNode = V_CURRICULUM[i]; break; }
-      }
-      pill.textContent = pNode ? pNode.name : pid;
-      prereqsEl.appendChild(pill);
-    });
-    document.getElementById("nd-prereqs-wrap").classList.remove("hidden");
-  } else {
-    document.getElementById("nd-prereqs-wrap").classList.add("hidden");
-  }
- 
-  // Fetch recent misconceptions for this node from sessions
-  var misconWrap = document.getElementById("nd-misconceptions-wrap");
-  var misconEl   = document.getElementById("nd-misconceptions");
-  misconEl.innerHTML = "";
- 
-  // Pull misconceptions from cached sessions
-  var nodeMiscons = [];
-  V_SESSIONS.forEach(function(s) {
-    if (s.node_id === smNode.id && s.misconceptions && s.misconceptions.length > 0) {
-      s.misconceptions.forEach(function(m) {
-        if (m && nodeMiscons.indexOf(m) === -1) nodeMiscons.push(m);
-      });
-    }
-  });
- 
-  if (nodeMiscons.length > 0) {
-    nodeMiscons.slice(0, 4).forEach(function(m) {
-      var pill = document.createElement("span");
-      pill.className = "nd-pill misconception";
-      pill.textContent = m;
-      misconEl.appendChild(pill);
-    });
-    misconWrap.classList.remove("hidden");
-  } else {
-    misconWrap.classList.add("hidden");
-  }
-}
- 
-// ══════════════════════════════════════════════
-//  PATCH loadDashboard TO CACHE DATA FOR PROGRESS VIEW
-// ══════════════════════════════════════════════
- 
-// Override the existing loadDashboard to also cache curriculum + mastery + sessions
-var _baseDashboard = loadDashboard;
-loadDashboard = function() {
-  return Promise.all([
-    api("/curriculum"),
-    api("/student/mastery"),
-    api("/student/sessions"),
-  ])
-  .then(function(results) {
-    var curriculumRes = results[0];
-    var masteryRes    = results[1];
-    var sessionsRes   = results[2];
- 
-    // Cache globally for progress view
-    V_CURRICULUM = curriculumRes.nodes;
-    V_SESSIONS   = sessionsRes.sessions || [];
- 
-    V_MASTERY_MAP = {};
-    masteryRes.mastery.forEach(function(m) {
-      V_MASTERY_MAP[m.node_id] = m.p_mastered;
-    });
- 
-    // Now run original dashboard render with the same data
-    show("dashboard");
-    document.getElementById("dash-email").textContent = state.user ? state.user.email : "";
-    document.getElementById("curriculum-container").innerHTML = "";
- 
-    var mastered = Object.values(V_MASTERY_MAP).filter(function(p) { return p >= 0.85; }).length;
-    var total    = V_CURRICULUM.length;
- 
-    document.getElementById("stat-mastered").textContent = mastered;
-    document.getElementById("stat-total").textContent    = "of " + total + " total";
-    document.getElementById("stat-sessions").textContent = masteryRes.mastery.length;
-    document.getElementById("stat-progress").textContent =
-      total > 0 ? Math.round(mastered / total * 100) + "%" : "0%";
- 
-    var nextNodeRes = results[0]; // will fetch separately
-    return api("/student/next-node").then(function(nextRes) {
-      var nextNodeId = nextRes.next_node ? nextRes.next_node.id : null;
-      var grouped    = groupBy(V_CURRICULUM, "category");
-      var container  = document.getElementById("curriculum-container");
- 
-      Object.entries(grouped).forEach(function(entry) {
-        var cat   = entry[0];
-        var nodes = entry[1];
- 
-        var section = document.createElement("div");
-        section.className = "category-section";
-        var catTitle = document.createElement("div");
-        catTitle.className = "category-title";
-        catTitle.textContent = CAT_LABELS[cat] || cat;
-        section.appendChild(catTitle);
- 
-        var grid = document.createElement("div");
-        grid.className = "nodes-grid";
- 
-        nodes.forEach(function(node) {
-          var p    = V_MASTERY_MAP[node.id] !== undefined ? V_MASTERY_MAP[node.id] : null;
-          var rec  = node.id === nextNodeId;
-          var info = p !== null ? masteryInfo(p) : { label: "New", cls: "badge-new" };
-          var pct  = p !== null ? Math.round(p * 100) : 0;
- 
-          var card = document.createElement("button");
-          card.className = "node-card" + (rec ? " recommended" : "");
-          card.onclick = function() { openModal(node, p); };
-          card.innerHTML =
-            (rec ? "<div class='rec-label'>★ Recommended next</div>" : "") +
-            "<div class='node-card-top'>" +
-              "<span class='node-name'>" + node.name + "</span>" +
-              "<span class='node-badge " + info.cls + "'>" + info.label + "</span>" +
-            "</div>" +
-            "<div class='node-diff'>" + diffLabel(node.difficulty) + "</div>" +
-            (p !== null
-              ? "<div class='mastery-bar-wrap'><div class='mastery-bar-fill' style='width:" + pct + "%'></div></div>"
-              : "");
-          grid.appendChild(card);
+      // ── SCREEN ROUTER ──────────────────────────────
+      function show(screenId) {
+        document.querySelectorAll(".screen").forEach(function(s) {
+          s.classList.remove("active");
         });
- 
-        section.appendChild(grid);
-        container.appendChild(section);
-      });
-    });
-  })
-  .catch(function(err) {
-    if (err.message.indexOf("401") !== -1) {
-      handleSignOut();
-    }
-  });
-};
+        document.getElementById("screen-" + screenId).classList.add("active");
+      }
+
+      // ── API HELPER ─────────────────────────────────
+      function api(path, opts) {
+        opts = opts || {};
+        var headers = { "Content-Type": "application/json" };
+        if (state.token) headers["Authorization"] = "Bearer " + state.token;
+        return fetch(API + path, Object.assign({}, opts, { headers: headers }))
+          .then(function(res) {
+            return res.json().then(function(data) {
+              if (!res.ok) throw new Error(data.detail || data.error || "Request failed");
+              return data;
+            });
+          });
+      }
+
+      // ── MASTERY HELPERS ────────────────────────────
+      function masteryInfo(p) {
+        if (p >= 0.85) return { label: "Mastered",    color: "#4ade80", cls: "badge-mastered" };
+        if (p >= 0.60) return { label: "Progressing", color: "#60a5fa", cls: "badge-progressing" };
+        if (p >= 0.30) return { label: "Learning",    color: "#fbbf24", cls: "badge-learning" };
+        return             { label: "Struggling",   color: "#f87171", cls: "badge-struggling" };
+      }
+
+      function diffLabel(d) {
+        return ["","Beginner","Easy","Medium","Hard","Expert"][d] || "";
+      }
+
+      function groupBy(arr, key) {
+        return arr.reduce(function(acc, item) {
+          var k = item[key] || "other";
+          if (!acc[k]) acc[k] = [];
+          acc[k].push(item);
+          return acc;
+        }, {});
+      }
+
+      var CAT_LABELS = {
+        foundations: "Foundations",
+        arrays: "Arrays & Strings",
+        searching: "Searching",
+        linked_lists: "Linked Lists",
+        trees: "Trees & Heaps",
+        graphs: "Graphs",
+        dynamic_programming: "Dynamic Programming",
+        recursion: "Recursion & Backtracking",
+        advanced: "Advanced",
+      };
+
+      // ══════════════════════════════════════════════
+      //  AUTH
+      // ══════════════════════════════════════════════
+      function setAuthMode(mode) {
+        V_AUTH_MODE = mode;
+        var btns = document.querySelectorAll(".tab-btn");
+        btns[0].classList.toggle("active", mode === "signin");
+        btns[1].classList.toggle("active", mode === "signup");
+        document.getElementById("auth-btn").textContent =
+          mode === "signin" ? "Sign In" : "Create Account";
+        hideAuthError();
+      }
+
+      function showAuthError(msg) {
+        var el = document.getElementById("auth-error");
+        el.textContent = msg;
+        el.classList.remove("hidden");
+      }
+
+      function hideAuthError() {
+        document.getElementById("auth-error").classList.add("hidden");
+      }
+
+      function handleAuth() {
+        var email    = document.getElementById("auth-email").value.trim();
+        var password = document.getElementById("auth-password").value;
+
+        if (!email || !password) { showAuthError("Email and password are required."); return; }
+        if (password.length < 6) { showAuthError("Password must be at least 6 characters."); return; }
+
+        var btn = document.getElementById("auth-btn");
+        btn.disabled = true;
+        btn.textContent = "Please wait...";
+        hideAuthError();
+
+        var endpoint = V_AUTH_MODE === "signup" ? "/auth/signup" : "/auth/signin";
+
+        api(endpoint, {
+          method: "POST",
+          body: JSON.stringify({ email: email, password: password }),
+        })
+        .then(function(data) {
+          state.token = data.access_token;
+          state.user  = { user_id: data.user_id, email: data.email };
+          localStorage.setItem("v_token", state.token);
+          localStorage.setItem("v_user", JSON.stringify(state.user));
+          return loadDashboard();
+        })
+        .catch(function(err) {
+          showAuthError(err.message);
+          btn.disabled = false;
+          btn.textContent = V_AUTH_MODE === "signin" ? "Sign In" : "Create Account";
+        });
+      }
+
+      function handleSignOut() {
+        state.token = null;
+        state.user  = null;
+        localStorage.removeItem("v_token");
+        localStorage.removeItem("v_user");
+        show("auth");
+      }
+
+      // ══════════════════════════════════════════════
+      //  DASHBOARD
+      // ══════════════════════════════════════════════
+      function loadDashboard() {
+        show("dashboard");
+        document.getElementById("dash-email").textContent = state.user ? state.user.email : "";
+        document.getElementById("curriculum-container").innerHTML =
+          "<p style='color:var(--muted);font-size:.85rem'>Loading curriculum...</p>";
+
+        return Promise.all([
+          api("/curriculum"),
+          api("/student/mastery"),
+          api("/student/next-node"),
+        ])
+        .then(function(results) {
+          var curriculumRes = results[0];
+          var masteryRes    = results[1];
+          var nextRes       = results[2];
+
+          var masteryMap = {};
+          masteryRes.mastery.forEach(function(m) {
+            masteryMap[m.node_id] = m.p_mastered;
+          });
+
+          var mastered = Object.values(masteryMap).filter(function(p) { return p >= 0.85; }).length;
+          var total    = curriculumRes.nodes.length;
+
+          document.getElementById("stat-mastered").textContent = mastered;
+          document.getElementById("stat-total").textContent    = "of " + total + " total";
+          document.getElementById("stat-sessions").textContent = masteryRes.mastery.length;
+          document.getElementById("stat-progress").textContent =
+            total > 0 ? Math.round(mastered / total * 100) + "%" : "0%";
+
+          var nextNodeId = nextRes.next_node ? nextRes.next_node.id : null;
+          var grouped    = groupBy(curriculumRes.nodes, "category");
+          var container  = document.getElementById("curriculum-container");
+          container.innerHTML = "";
+
+          Object.entries(grouped).forEach(function(entry) {
+            var cat   = entry[0];
+            var nodes = entry[1];
+
+            var section = document.createElement("div");
+            section.className = "category-section";
+
+            var catTitle = document.createElement("div");
+            catTitle.className = "category-title";
+            catTitle.textContent = CAT_LABELS[cat] || cat;
+            section.appendChild(catTitle);
+
+            var grid = document.createElement("div");
+            grid.className = "nodes-grid";
+
+            nodes.forEach(function(node) {
+              var p   = masteryMap[node.id] !== undefined ? masteryMap[node.id] : null;
+              var rec = node.id === nextNodeId;
+              var info = p !== null ? masteryInfo(p) : { label: "New", cls: "badge-new" };
+              var pct  = p !== null ? Math.round(p * 100) : 0;
+
+              var card = document.createElement("button");
+              card.className = "node-card" + (rec ? " recommended" : "");
+              card.onclick = function() { openModal(node, p); };
+              card.innerHTML =
+                (rec ? "<div class='rec-label'>★ Recommended next</div>" : "") +
+                "<div class='node-card-top'>" +
+                  "<span class='node-name'>" + node.name + "</span>" +
+                  "<span class='node-badge " + info.cls + "'>" + info.label + "</span>" +
+                "</div>" +
+                "<div class='node-diff'>" + diffLabel(node.difficulty) + "</div>" +
+                (p !== null
+                  ? "<div class='mastery-bar-wrap'><div class='mastery-bar-fill' style='width:" + pct + "%'></div></div>"
+                  : "");
+
+              grid.appendChild(card);
+            });
+
+            section.appendChild(grid);
+            container.appendChild(section);
+          });
+        })
+        .catch(function(err) {
+          if (err.message.indexOf("401") !== -1) {
+            handleSignOut();
+          } else {
+            document.getElementById("curriculum-container").innerHTML =
+              "<p style='color:#f87171;font-size:.85rem'>Error: " + err.message + "</p>";
+          }
+        });
+      }
+
+      // ── Modal ──────────────────────────────────────
+      function openModal(node, currentMastery) {
+        state.selectedNode = node;
+        state.persona = "vector";
+
+        document.getElementById("modal-node-name").textContent = node.name;
+        document.getElementById("modal-node-meta").textContent =
+          diffLabel(node.difficulty) + " · " + node.category;
+
+        var warnEl = document.getElementById("modal-prereq-warn");
+        if (node.prerequisites && node.prerequisites.length > 0) {
+          warnEl.textContent = "Prerequisites: " + node.prerequisites.join(", ");
+          warnEl.classList.remove("hidden");
+        } else {
+          warnEl.classList.add("hidden");
+        }
+
+        selectPersona("vector");
+        document.getElementById("start-modal").classList.add("open");
+      }
+
+      function closeModal() {
+        document.getElementById("start-modal").classList.remove("open");
+        state.selectedNode = null;
+        var btn = document.getElementById("modal-start-btn");
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Start Session →";
+        }
+        var warnEl = document.getElementById("modal-prereq-warn");
+        if (warnEl) warnEl.classList.add("hidden");
+      }
+
+      function selectPersona(p) {
+        state.persona = p;
+        document.getElementById("persona-vector").classList.toggle("selected", p === "vector");
+        document.getElementById("persona-aura").classList.toggle("selected", p === "aura");
+      }
+
+      function confirmStartSession() {
+        if (!state.selectedNode) return;
+        var btn = document.getElementById("modal-start-btn");
+        btn.disabled = true;
+        btn.textContent = "Starting... (may take 30s on first load)";
+
+        api("/session/start", {
+          method: "POST",
+          body: JSON.stringify({ node_id: state.selectedNode.id, persona: state.persona }),
+        })
+        .then(function(res) {
+          state.session = res;
+          state.exchangeCount = 0;
+          state.lastMastery = 0.10;
+          closeModal();
+          openSession(res);
+        })
+        .catch(function(err) {
+          alert(err.message);
+          btn.disabled = false;
+          btn.textContent = "Start Session →";
+        });
+      }
+
+      // ══════════════════════════════════════════════
+      //  SESSION / CHAT
+      // ══════════════════════════════════════════════
+      function openSession(sessionData) {
+        show("session");
+        document.getElementById("session-topic-name").textContent = sessionData.node_name;
+        updateSessionMeta();
+        updateMasteryStrip(0.10, "—");
+        document.getElementById("escalation-banner").classList.add("hidden");
+        document.getElementById("messages-inner").innerHTML = "";
+
+        if (sessionData.prereq_warning) {
+          var banner = document.getElementById("escalation-banner");
+          banner.textContent = "⚠ " + sessionData.prereq_warning;
+          banner.classList.remove("hidden");
+        }
+
+        appendMessage("ai", sessionData.opening_question, "PROBE", null);
+        setTimeout(function() { document.getElementById("msg-input").focus(); }, 100);
+      }
+
+      function updateSessionMeta() {
+        var personaName = state.persona === "vector" ? "⚡ Vector" : "🌊 Aura";
+        document.getElementById("session-meta-text").textContent =
+          personaName + " · " + state.exchangeCount + " exchanges";
+      }
+
+      function updateMasteryStrip(p, label) {
+        var pct = Math.round(p * 100);
+        document.getElementById("mastery-fill").style.width = pct + "%";
+        var info = masteryInfo(p);
+        var txt  = label !== "—" ? pct + "% · " + label : "—";
+        var el   = document.getElementById("mastery-pct-text");
+        el.textContent = txt;
+        el.style.color = label !== "—" ? info.color : "var(--muted)";
+      }
+
+      function appendMessage(role, text, phase, misconception) {
+        var wrap    = document.getElementById("messages-inner");
+        var isAI    = role === "ai";
+        var initial = isAI
+          ? (state.persona === "vector" ? "V" : "A")
+          : (state.user && state.user.email ? state.user.email[0].toUpperCase() : "U");
+
+        var div = document.createElement("div");
+        div.className = "msg " + role;
+        div.innerHTML =
+          "<div class='msg-avatar'>" + initial + "</div>" +
+          "<div class='msg-content'>" +
+            "<div class='msg-bubble'>" + text + "</div>" +
+            (isAI && phase
+              ? "<div class='msg-meta'>" +
+                  "<span class='phase-tag'>" + phase + "</span>" +
+                  (misconception ? "<span class='misconception-tag'>⚠ " + misconception + "</span>" : "") +
+                "</div>"
+              : "") +
+          "</div>";
+
+        wrap.appendChild(div);
+        scrollToBottom();
+      }
+
+      function showTyping() {
+        var wrap = document.getElementById("messages-inner");
+        var div  = document.createElement("div");
+        div.className = "typing";
+        div.id = "typing-indicator";
+        div.innerHTML =
+          "<div class='msg-avatar' style='background:var(--surface);border:1px solid var(--border2);color:var(--accent)'>" +
+            (state.persona === "vector" ? "V" : "A") +
+          "</div>" +
+          "<div class='typing-dots'>" +
+            "<div class='dot'></div><div class='dot'></div><div class='dot'></div>" +
+          "</div>";
+        wrap.appendChild(div);
+        scrollToBottom();
+      }
+
+      function hideTyping() {
+        var el = document.getElementById("typing-indicator");
+        if (el) el.remove();
+      }
+
+      function scrollToBottom() {
+        var wrap = document.getElementById("messages-wrap");
+        wrap.scrollTop = wrap.scrollHeight;
+      }
+
+      function handleSend() {
+        var input = document.getElementById("msg-input");
+        var text  = input.value.trim();
+        if (!text || !state.session) return;
+
+        input.value = "";
+        input.style.height = "44px";
+        document.getElementById("send-btn").disabled = true;
+
+        appendMessage("user", text, null, null);
+        showTyping();
+
+        api("/chat", {
+          method: "POST",
+          body: JSON.stringify({
+            session_id: state.session.session_id,
+            message: text,
+            persona: state.persona,
+          }),
+        })
+        .then(function(res) {
+          hideTyping();
+          appendMessage("ai", res.response, res.phase, res.misconception_detected);
+
+          state.lastMastery = res.mastery.p_mastered;
+          var info = masteryInfo(res.mastery.p_mastered);
+          updateMasteryStrip(res.mastery.p_mastered, info.label);
+
+          state.exchangeCount = res.exchange_count;
+          updateSessionMeta();
+
+          if (res.escalate_to_node) {
+            var banner = document.getElementById("escalation-banner");
+            banner.textContent = "⚠ You may need to review \"" + res.escalate_to_node + "\" first.";
+            banner.classList.remove("hidden");
+          }
+        })
+        .catch(function(err) {
+          hideTyping();
+          appendMessage("ai", "Error: " + err.message, null, null);
+        })
+        .finally(function() {
+          document.getElementById("send-btn").disabled = false;
+          document.getElementById("msg-input").focus();
+        });
+      }
+
+      function handleInputKey(e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          handleSend();
+        }
+      }
+
+      function autoResize(el) {
+        el.style.height = "auto";
+        el.style.height = Math.min(el.scrollHeight, 120) + "px";
+      }
+
+      function handleEndSession() {
+        if (!state.session) return;
+        var btn = document.getElementById("end-btn");
+        btn.disabled = true;
+        btn.textContent = "Ending...";
+
+        api("/session/end", {
+          method: "POST",
+          body: JSON.stringify({ session_id: state.session.session_id }),
+        })
+        .then(function() {
+          return api("/session/" + state.session.session_id + "/summary");
+        })
+        .then(function(summary) {
+          showSummary(summary);
+        })
+        .catch(function(err) {
+          alert(err.message);
+          btn.disabled = false;
+          btn.textContent = "End Session";
+        });
+      }
+
+      function goToDashboard() {
+        state.session = null;
+        loadDashboard();
+      }
+
+      // ══════════════════════════════════════════════
+      //  SUMMARY
+      // ══════════════════════════════════════════════
+      function showSummary(summary) {
+        show("summary");
+
+        var p    = state.lastMastery;
+        var info = masteryInfo(p);
+        var pct  = Math.round(p * 100);
+        var emoji = p >= 0.85 ? "🎯" : p >= 0.60 ? "📈" : "💪";
+
+        document.getElementById("summary-emoji").textContent       = emoji;
+        document.getElementById("summary-title").textContent       = summary.node_name;
+        document.getElementById("summary-sub").textContent         = summary.node_id + " · " + state.persona;
+        document.getElementById("sum-exchanges").textContent       = summary.total_exchanges;
+        document.getElementById("sum-phase").textContent           = summary.final_phase;
+        document.getElementById("sum-gaps").textContent            = (summary.misconceptions_identified || []).length;
+        document.getElementById("sum-mastery-label").textContent   = info.label;
+        document.getElementById("sum-mastery-pct").textContent     = pct + "%";
+        document.getElementById("sum-mastery-fill").style.width    = pct + "%";
+
+        var items = summary.misconceptions_identified || [];
+        var card  = document.getElementById("misconceptions-card");
+        var list  = document.getElementById("misconception-list");
+
+        if (items.length === 0) {
+          card.classList.add("hidden");
+        } else {
+          card.classList.remove("hidden");
+          list.innerHTML = items.map(function(m) {
+            return "<li class='misconception-item'>" + m + "</li>";
+          }).join("");
+        }
+      }
+      // ===============================================================
+      // DASHBOARD VIEW SWITCHER
+      // ===============================================================
+
+      var V_CURRICULUM = [];    // full node list cached after first load
+      var V_MASTERY_MAP = {};   // {node_id: p_mastered}
+      var V_SESSIONS = [];      // recent sessions
+
+      function switchDashView(view) {
+        var isProgress = view === "progress";
+        document.getElementById("curriculum-container").classList.toggle("hidden", isProgress);
+        document.getElementById("progress-view").classList.toggle("hidden", !isProgress);
+        document.getElementById("nav-topics").classList.toggle("active", !isProgress);
+        document.getElementById("nav-progress").classList.toggle("active", isProgress);
+        document.querySelector(".stats-row").classList.toggle("hidden", isProgress)
+
+        if (isProgress && V_CURRICULUM.length > 0) {
+          renderProgressDashboard();
+        }
+      }
+
+      // Hook into existing loadDashboard to cache data
+      var _origLoadDashboard = loadDashboard;
+      loadDashboard = function() {
+        return _origLoadDashboard.apply(this, arguments).then(function() {
+          // Cache is populated inside renderProgressDashboard on first call
+        });
+      };
+
+      // ===================================================================
+      // PROGRESS DASHBOARD RENDERER
+      // ===================================================================
+
+      function renderProgressDashboard() {
+        renderCategoryBars();
+        drawSkillMap();
+      }
+
+      // --- CATEGORY WEAKNESS BARS -------------------
+      var CAT_COLORS = {
+        foundations:         "#c8f135",
+        arrays:              "#60a5fa",
+        searching:           "#f59e0b",
+        linked_lists:        "#a78bfa",
+        trees:               "#34d399",
+        graphs:              "#f87171",
+        dynamic_programming: "#fb923c",
+        recursion:           "#e879f9",
+        advanced:            "#94a3b8"
+      };
+
+      function renderCategoryBars() {
+        // Group nodes by category and compute average mastery
+        var catData = {};
+        V_CURRICULUM.forEach(function(node) {
+          var cat = node.category || "other";
+          if (!catData[cat]) catData[cat] = { total: 0, count: 0, name: CAT_LABELS[cat] || cat };
+          var p = V_MASTERY_MAP[node.id] !== undefined ? V_MASTERY_MAP[node.id] : 0;
+          catData[cat].total += p;
+          catData[cat].count += 1;
+        });
+
+        // Sort by average mastery ascending (weakest first)
+        var sorted = Object.entries(catData).sort(function(a, b) {
+          return (a[1].total / a[1].count) - (b[1].total / b[1].count);
+        });
+
+        var container = document.getElementById("cat-bars-container");
+        container.innerHTML = "";
+
+        sorted.forEach(function(entry) {
+          var cat = entry[0];
+          var data = entry[1];
+          var avg = data.count > 0 ? data.total / data.count : 0;
+          var pct = Math.round(avg * 100);
+          var color = CAT_COLORS[cat] || "#888";
+
+          var row = document.createElement("div");
+          row.className = "cat-bar-row";
+          row.innerHTML = 
+            "<div class='cat-bar-header'>" + 
+              "<span class='cat-bar-name'>" + data.name + "</span>" + 
+              "<span class='cat-bar-pct'>" + pct + "%</span>" +
+            "</div>" +
+            "<div class='cat-bar-track'>" + 
+              "<div class='cat-bar-fill' style='width:" + pct + "%;background:" + color + "'></div>" + 
+            "</div>";
+          container.appendChild(row);
+        });
+      }
+
+      // --- SKILL MAP (CANVAS) ------------------------------------
+
+      var SM = {
+        nodes: [],
+        edges: [],
+        selected: null,
+        canvas: null,
+        ctx: null,
+        dpr: 1,
+        W: 0,
+        H: 0
+      };
+
+      // Fixed layout positions for 18 nodes - organized left→right by dependency depth
+      var NODE_LAYOUT = {
+        // Depth 0 — foundations
+        "arrays_basics":           { col: 0, row: 1 },
+        // Depth 1
+        "hashing":                 { col: 1, row: 0 },
+        "two_pointers":            { col: 1, row: 1 },
+        "binary_search":           { col: 1, row: 2 },
+        "linked_list":             { col: 1, row: 3 },
+        "tree_traversal":          { col: 1, row: 4 },
+        // Depth 2
+        "sliding_window_fixed":    { col: 2, row: 0 },
+        "sliding_window_variable": { col: 2, row: 1 },
+        "bst":                     { col: 2, row: 3 },
+        "heap":                    { col: 2, row: 4 },
+        "dp_1d":                   { col: 2, row: 5 },
+        // Depth 3
+        "graph_bfs_dfs":           { col: 3, row: 1 },
+        "backtracking":            { col: 3, row: 3 },
+        "dp_2d":                   { col: 3, row: 5 },
+        // Depth 4
+        "topological_sort":        { col: 4, row: 0 },
+        "dijkstra":                { col: 4, row: 2 },
+        "union_find":              { col: 4, row: 3 },
+        "trie":                    { col: 4, row: 4 },
+      };
+      
+      function drawSkillMap() {
+        var canvas = document.getElementById("skillmap-canvas");
+        if (!canvas) return;
+        SM.canvas = canvas;
+        SM.ctx    = canvas.getContext("2d");
+        SM.dpr    = window.devicePixelRatio || 1;
+      
+        var wrap      = canvas.parentElement;
+        var isMobile  = window.innerWidth < 600;
+      
+        // On mobile: fixed 600px wide (scrollable), shorter height
+        // On desktop: fill container
+        var W = isMobile ? 600 : Math.max(wrap.clientWidth, 600);
+        var H = isMobile ? 420 : 480;
+      
+        canvas.width  = W * SM.dpr;
+        canvas.height = H * SM.dpr;
+        canvas.style.width  = W + "px";
+        canvas.style.height = H + "px";
+        SM.ctx.scale(SM.dpr, SM.dpr);
+        SM.W = W;
+        SM.H = H;
+      
+        var COLS  = 5;
+        var ROWS  = 6;
+        var padX  = isMobile ? 55 : 80;
+        var padY  = isMobile ? 38 : 50;
+        var cellW = (W - padX * 2) / (COLS - 1);
+        var cellH = (H - padY * 2) / (ROWS - 1);
+        var R     = isMobile ? 18 : 22;
+      
+        SM.nodes = [];
+        SM.edges = [];
+      
+        V_CURRICULUM.forEach(function(node) {
+          var layout = NODE_LAYOUT[node.id];
+          if (!layout) return;
+          var x = padX + layout.col * cellW;
+          var y = padY + layout.row * cellH;
+          var p = V_MASTERY_MAP[node.id] !== undefined ? V_MASTERY_MAP[node.id] : 0;
+      
+          SM.nodes.push({
+            id:            node.id,
+            name:          node.name,
+            x:             x,
+            y:             y,
+            p:             p,
+            category:      node.category,
+            prerequisites: node.prerequisites || [],
+            difficulty:    node.difficulty,
+            r:             R,
+          });
+      
+          (node.prerequisites || []).forEach(function(prereqId) {
+            SM.edges.push({ from: prereqId, to: node.id });
+          });
+        });
+      
+        renderSkillMap();
+      
+        // Remove old listeners by cloning the canvas
+        var newCanvas = canvas.cloneNode(true);
+        canvas.parentNode.replaceChild(newCanvas, canvas);
+        SM.canvas = newCanvas;
+        SM.ctx    = newCanvas.getContext("2d");
+        SM.ctx.scale(SM.dpr, SM.dpr);
+      
+        // Re-render on the new canvas
+        renderSkillMap();
+      
+        newCanvas.onclick = function(e) {
+          var rect = newCanvas.getBoundingClientRect();
+          // Account for scroll position within the wrapper
+          var scaleX = SM.W / rect.width;
+          var mx = (e.clientX - rect.left) * scaleX;
+          var my = (e.clientY - rect.top)  * scaleX;
+          var hit = null;
+      
+          SM.nodes.forEach(function(n) {
+            var dx = mx - n.x;
+            var dy = my - n.y;
+            if (Math.sqrt(dx*dx + dy*dy) <= n.r + 6) hit = n;
+          });
+      
+          SM.selected = hit ? hit.id : null;
+          renderSkillMap();
+          if (hit) showNodeDetail(hit);
+        };
+      
+        newCanvas.onmousemove = function(e) {
+          var rect  = newCanvas.getBoundingClientRect();
+          var scaleX = SM.W / rect.width;
+          var mx    = (e.clientX - rect.left) * scaleX;
+          var my    = (e.clientY - rect.top)  * scaleX;
+          var over  = SM.nodes.some(function(n) {
+            var dx = mx - n.x, dy = my - n.y;
+            return Math.sqrt(dx*dx + dy*dy) <= n.r + 6;
+          });
+          newCanvas.style.cursor = over ? "pointer" : "default";
+        };
+      }
+      
+      function renderSkillMap() {
+        var ctx = SM.ctx;
+        var W   = SM.W;
+        var H   = SM.H;
+        ctx.clearRect(0, 0, W, H);
+      
+        // ── Draw edges ──
+        var nodeById = {};
+        SM.nodes.forEach(function(n) { nodeById[n.id] = n; });
+      
+        SM.edges.forEach(function(edge) {
+          var from = nodeById[edge.from];
+          var to   = nodeById[edge.to];
+          if (!from || !to) return;
+      
+          var isHighlighted = SM.selected &&
+            (edge.from === SM.selected || edge.to === SM.selected);
+      
+          ctx.beginPath();
+          ctx.moveTo(from.x, from.y);
+      
+          // Curved bezier edge
+          var mx = (from.x + to.x) / 2;
+          ctx.bezierCurveTo(mx, from.y, mx, to.y, to.x, to.y);
+      
+          ctx.strokeStyle = isHighlighted ? "#c8f13588" : "#2a2a2a";
+          ctx.lineWidth   = isHighlighted ? 2 : 1;
+          ctx.stroke();
+      
+          // Arrow tip
+          var angle = Math.atan2(to.y - from.y, to.x - from.x);
+          var ax = to.x - Math.cos(angle) * (to.r + 2);
+          var ay = to.y - Math.sin(angle) * (to.r + 2);
+          ctx.beginPath();
+          ctx.moveTo(ax, ay);
+          ctx.lineTo(ax - 8 * Math.cos(angle - 0.4), ay - 8 * Math.sin(angle - 0.4));
+          ctx.lineTo(ax - 8 * Math.cos(angle + 0.4), ay - 8 * Math.sin(angle + 0.4));
+          ctx.closePath();
+          ctx.fillStyle = isHighlighted ? "#c8f13588" : "#2a2a2a";
+          ctx.fill();
+        });
+      
+        // ── Draw nodes ──
+        SM.nodes.forEach(function(n) {
+          var isSelected = SM.selected === n.id;
+          var info       = masteryInfo(n.p);
+          var color      = CAT_COLORS[n.category] || "#888";
+      
+          // Outer glow for selected
+          if (isSelected) {
+            ctx.beginPath();
+            ctx.arc(n.x, n.y, n.r + 8, 0, Math.PI * 2);
+            ctx.fillStyle = color + "22";
+            ctx.fill();
+          }
+      
+          // Mastery fill ring (background circle)
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+          ctx.fillStyle = "#111";
+          ctx.fill();
+          ctx.strokeStyle = isSelected ? color : "#333";
+          ctx.lineWidth   = isSelected ? 2.5 : 1.5;
+          ctx.stroke();
+      
+          // Mastery arc (filled portion)
+          if (n.p > 0) {
+            ctx.beginPath();
+            ctx.moveTo(n.x, n.y);
+            ctx.arc(n.x, n.y, n.r - 3, -Math.PI / 2, -Math.PI / 2 + n.p * Math.PI * 2);
+            ctx.closePath();
+            ctx.fillStyle = color + (n.p >= 0.85 ? "cc" : "55");
+            ctx.fill();
+          }
+      
+          // Difficulty dots at bottom of node
+          for (var d = 0; d < n.difficulty; d++) {
+            ctx.beginPath();
+            ctx.arc(n.x - (n.difficulty - 1) * 3 + d * 6, n.y + n.r + 6, 2, 0, Math.PI * 2);
+            ctx.fillStyle = isSelected ? color : "#444";
+            ctx.fill();
+          }
+      
+          // Label below
+          ctx.font       = isSelected ? "bold 9px 'Syne', sans-serif" : "9px 'Syne', sans-serif";
+          ctx.fillStyle  = isSelected ? "#e8e8e8" : "#666";
+          ctx.textAlign  = "center";
+          ctx.textBaseline = "top";
+      
+          // Wrap long names
+          var words    = n.name.split(" ");
+          var line1    = words.slice(0, 2).join(" ");
+          var line2    = words.slice(2).join(" ");
+          var labelY   = n.y + n.r + 12;
+          ctx.fillText(line1, n.x, labelY);
+          if (line2) ctx.fillText(line2, n.x, labelY + 11);
+        });
+      }
+      
+      // ── NODE DETAIL PANEL ──────────────────────────
+      
+      function showNodeDetail(smNode) {
+        var content = document.getElementById("nd-content");
+        var empty = document.getElementById("nd-empty");
+
+        if (!empty || !content) return;
+        // Find full node data from curriculum
+        var fullNode = null;
+        for (var i = 0; i < V_CURRICULUM.length; i++) {
+          if (V_CURRICULUM[i].id === smNode.id) { fullNode = V_CURRICULUM[i]; break; }
+        }
+      
+        document.getElementById("nd-empty").classList.add("hidden");
+        var content = document.getElementById("nd-content");
+        content.classList.remove("hidden");
+      
+        var p    = V_MASTERY_MAP[smNode.id] !== undefined ? V_MASTERY_MAP[smNode.id] : 0;
+        var info = masteryInfo(p);
+        var pct  = Math.round(p * 100);
+      
+        document.getElementById("nd-name").textContent = smNode.name;
+        document.getElementById("nd-meta").textContent =
+          diffLabel(smNode.difficulty) + " · " + smNode.category;
+      
+        // Mastery mini bar
+        document.getElementById("nd-mastery").innerHTML =
+          "<div style='display:flex;justify-content:space-between;margin-bottom:4px'>" +
+            "<span style='font-size:.75rem;color:" + info.color + ";font-weight:600'>" + info.label + "</span>" +
+            "<span style='font-size:.72rem;font-family:var(--mono);color:var(--muted)'>" + pct + "%</span>" +
+          "</div>" +
+          "<div style='height:4px;background:var(--muted2);border-radius:2px;overflow:hidden'>" +
+            "<div style='height:100%;width:" + pct + "%;background:" + info.color + ";border-radius:2px'></div>" +
+          "</div>";
+      
+        // Target insight — use knowledge graph data baked into curriculum
+        // Since we only get id/name/category/difficulty/prerequisites from /curriculum,
+        // show a motivating message based on mastery status
+        var insightMap = {
+          "arrays_basics":           "Array operations have different costs at different positions; random access is O(1) but mutation is O(n).",
+          "hashing":                 "Trading space for time: a hash map converts an O(n) search into amortized O(1) at the cost of O(n) space.",
+          "two_pointers":            "Two pointers eliminate the inner loop by using sortedness to make a greedy pointer-movement decision at each step.",
+          "sliding_window_fixed":    "A fixed window slides in O(n) by incrementally updating state rather than recomputing, turning O(n×k) into O(n).",
+          "sliding_window_variable": "The window invariant drives everything: define what makes a window valid, expand greedily, shrink only when the invariant breaks.",
+          "binary_search":           "Binary search works on any monotonic decision function — the key is identifying what property lets you eliminate half the search space.",
+          "linked_list":             "Most linked list problems reduce to careful pointer manipulation; the dummy head node eliminates special-casing the head.",
+          "tree_traversal":          "Traversal order determines what information is available when you process a node; inorder gives sorted order for BSTs.",
+          "bst":                     "BST gives O(log n) search only when balanced; inorder traversal always yields sorted output.",
+          "heap":                    "A heap of size k gives you the k-th order statistic in O(n log k); the two-heap pattern maintains a dynamic median.",
+          "graph_bfs_dfs":           "BFS guarantees shortest path in unweighted graphs because it explores layer by layer; DFS is better for exhaustive path exploration.",
+          "topological_sort":        "Topological sort imposes an ordering on a DAG — Kahn's does this by repeatedly removing zero in-degree nodes.",
+          "dijkstra":                "Dijkstra is greedy BFS with a min-heap: always extend the cheapest known path, relying on non-negative weights.",
+          "dp_1d":                   "DP works when a problem has optimal substructure: the optimal solution to the whole is built from optimal solutions to sub-problems.",
+          "dp_2d":                   "2D DP extends 1D by adding a second axis to the state — usually a second sequence, a capacity, or a constraint.",
+          "backtracking":            "Backtracking is a systematic decision-tree search with undo; pruning is the only thing that separates it from brute force.",
+          "union_find":              "Union-Find gives near-O(1) connectivity queries; path compression + union by rank together achieve amortized O(α(n)).",
+          "trie":                    "A trie trades O(n) space for O(L) time on all string operations, and uniquely supports prefix queries hash maps can't do efficiently.",
+        };
+      
+        document.getElementById("nd-insight").textContent =
+          insightMap[smNode.id] || "Start a session to unlock the target insight for this topic.";
+      
+        // Prerequisites
+        var prereqsEl = document.getElementById("nd-prereqs");
+        prereqsEl.innerHTML = "";
+        if (smNode.prerequisites && smNode.prerequisites.length > 0) {
+          smNode.prerequisites.forEach(function(pid) {
+            var pill = document.createElement("span");
+            pill.className = "nd-pill prereq";
+            var pNode = null;
+            for (var i = 0; i < V_CURRICULUM.length; i++) {
+              if (V_CURRICULUM[i].id === pid) { pNode = V_CURRICULUM[i]; break; }
+            }
+            pill.textContent = pNode ? pNode.name : pid;
+            prereqsEl.appendChild(pill);
+          });
+          document.getElementById("nd-prereqs-wrap").classList.remove("hidden");
+        } else {
+          document.getElementById("nd-prereqs-wrap").classList.add("hidden");
+        }
+      
+        // Fetch recent misconceptions for this node from sessions
+        var misconWrap = document.getElementById("nd-misconceptions-wrap");
+        var misconEl   = document.getElementById("nd-misconceptions");
+        misconEl.innerHTML = "";
+      
+        // Pull misconceptions from cached sessions
+        var nodeMiscons = [];
+        V_SESSIONS.forEach(function(s) {
+          if (s.node_id === smNode.id && s.misconceptions && s.misconceptions.length > 0) {
+            s.misconceptions.forEach(function(m) {
+              if (m && nodeMiscons.indexOf(m) === -1) nodeMiscons.push(m);
+            });
+          }
+        });
+      
+        if (nodeMiscons.length > 0) {
+          nodeMiscons.slice(0, 4).forEach(function(m) {
+            var pill = document.createElement("span");
+            pill.className = "nd-pill misconception";
+            pill.textContent = m;
+            misconEl.appendChild(pill);
+          });
+          misconWrap.classList.remove("hidden");
+        } else {
+          misconWrap.classList.add("hidden");
+        }
+      }
+      
+      // ══════════════════════════════════════════════
+      //  PATCH loadDashboard TO CACHE DATA FOR PROGRESS VIEW
+      // ══════════════════════════════════════════════
+      
+      // Override the existing loadDashboard to also cache curriculum + mastery + sessions
+      var _baseDashboard = loadDashboard;
+      loadDashboard = function() {
+        return Promise.all([
+          api("/curriculum"),
+          api("/student/mastery"),
+          api("/student/sessions"),
+        ])
+        .then(function(results) {
+          var curriculumRes = results[0];
+          var masteryRes    = results[1];
+          var sessionsRes   = results[2];
+      
+          // Cache globally for progress view
+          V_CURRICULUM = curriculumRes.nodes;
+          V_SESSIONS   = sessionsRes.sessions || [];
+      
+          V_MASTERY_MAP = {};
+          masteryRes.mastery.forEach(function(m) {
+            V_MASTERY_MAP[m.node_id] = m.p_mastered;
+          });
+      
+          // Now run original dashboard render with the same data
+          show("dashboard");
+          document.getElementById("dash-email").textContent = state.user ? state.user.email : "";
+          document.getElementById("curriculum-container").innerHTML = "";
+      
+          var mastered = Object.values(V_MASTERY_MAP).filter(function(p) { return p >= 0.85; }).length;
+          var total    = V_CURRICULUM.length;
+      
+          document.getElementById("stat-mastered").textContent = mastered;
+          document.getElementById("stat-total").textContent    = "of " + total + " total";
+          document.getElementById("stat-sessions").textContent = masteryRes.mastery.length;
+          document.getElementById("stat-progress").textContent =
+            total > 0 ? Math.round(mastered / total * 100) + "%" : "0%";
+      
+          var nextNodeRes = results[0]; // will fetch separately
+          return api("/student/next-node").then(function(nextRes) {
+            var nextNodeId = nextRes.next_node ? nextRes.next_node.id : null;
+            var grouped    = groupBy(V_CURRICULUM, "category");
+            var container  = document.getElementById("curriculum-container");
+      
+            Object.entries(grouped).forEach(function(entry) {
+              var cat   = entry[0];
+              var nodes = entry[1];
+      
+              var section = document.createElement("div");
+              section.className = "category-section";
+              var catTitle = document.createElement("div");
+              catTitle.className = "category-title";
+              catTitle.textContent = CAT_LABELS[cat] || cat;
+              section.appendChild(catTitle);
+      
+              var grid = document.createElement("div");
+              grid.className = "nodes-grid";
+      
+              nodes.forEach(function(node) {
+                var p    = V_MASTERY_MAP[node.id] !== undefined ? V_MASTERY_MAP[node.id] : null;
+                var rec  = node.id === nextNodeId;
+                var info = p !== null ? masteryInfo(p) : { label: "New", cls: "badge-new" };
+                var pct  = p !== null ? Math.round(p * 100) : 0;
+      
+                var card = document.createElement("button");
+                card.className = "node-card" + (rec ? " recommended" : "");
+                card.onclick = function() { openModal(node, p); };
+                card.innerHTML =
+                  (rec ? "<div class='rec-label'>★ Recommended next</div>" : "") +
+                  "<div class='node-card-top'>" +
+                    "<span class='node-name'>" + node.name + "</span>" +
+                    "<span class='node-badge " + info.cls + "'>" + info.label + "</span>" +
+                  "</div>" +
+                  "<div class='node-diff'>" + diffLabel(node.difficulty) + "</div>" +
+                  (p !== null
+                    ? "<div class='mastery-bar-wrap'><div class='mastery-bar-fill' style='width:" + pct + "%'></div></div>"
+                    : "");
+                grid.appendChild(card);
+              });
+      
+              section.appendChild(grid);
+              container.appendChild(section);
+            });
+          });
+        })
+        .catch(function(err) {
+          if (err.message.indexOf("401") !== -1) {
+            handleSignOut();
+          }
+        });
+      };
 </script>
 </body>
 </html>
