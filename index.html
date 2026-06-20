@@ -1577,6 +1577,12 @@
 
       function updateSessionMeta() {
         var personaName = state.persona === "vector" ? "⚡ Vector" : "🌊 Aura";
+        var MAX = 20;
+        var remaining = MAX - state.exchangeCount;
+        var countText = remaining > 5
+          ? state.exchangeCount + "exchanges"
+          : remaining + "exchanges left";
+        
         document.getElementById("session-meta-text").textContent =
           personaName + " · " + state.exchangeCount + " exchanges";
       }
@@ -1677,6 +1683,21 @@
             var banner = document.getElementById("escalation-banner");
             banner.textContent = "⚠ You may need to review \"" + res.escalate_to_node + "\" first.";
             banner.classList.remove("hidden");
+          }
+          if (res.session_ended) {
+            document.getElementById("msg-input").disabled = true;
+            document.getElementById("send-btn").disabled = true;
+
+            setTimeout(function() {
+              var sessionId = state.session.session_id;
+              state.session = null;
+              state.exchangeCount = 0;
+              state.lastMastery = res.maastery.p_mastered;
+
+              api("/session/" + sessionId + "/summary")
+                .then(function(summary) { showSummary(summary); })
+                .catch(function() { loadDashboard(); })
+            }, 3000);
           }
         })
         .catch(function(err) {
