@@ -1559,6 +1559,9 @@
       // ══════════════════════════════════════════════
       function openSession(sessionData) {
         show("session");
+        document.getElementById("msg-input").disabled = false;
+        document.getElementById("send-btn").disabled = false;
+        document.getElementById("end-btn").disabled = false;
         document.getElementById("session-topic-name").textContent = sessionData.node_name;
         updateSessionMeta();
         updateMasteryStrip(0.10, "—");
@@ -1685,18 +1688,28 @@
             banner.classList.remove("hidden");
           }
           if (res.session_ended) {
+            var finalMastery = (res.mastery && res.mastery.p_mastered !== undefined)
+              ? res.mastery.p_mastered
+              : state.lastMastery;
+            state.lastMastery = finalMastery;
+
             document.getElementById("msg-input").disabled = true;
             document.getElementById("send-btn").disabled = true;
+            document.getElementById("end-btn").disabled = true;
+
+            var endedSessionId = state.session ? state.session.session_id : null;
 
             setTimeout(function() {
-              var sessionId = state.session.session_id;
               state.session = null;
               state.exchangeCount = 0;
-              state.lastMastery = res.maastery.p_mastered;
 
-              api("/session/" + sessionId + "/summary")
-                .then(function(summary) { showSummary(summary); })
-                .catch(function() { loadDashboard(); })
+              if (endedSessionId) {
+                api("/session/" + sessionId + "/summary")
+                  .then(function(summary) { showSummary(summary); })
+                  .catch(function() { loadDashboard(); });
+              } else {
+                loadDashboard()
+              }
             }, 3000);
           }
         })
