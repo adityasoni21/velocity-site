@@ -1704,7 +1704,7 @@
               state.exchangeCount = 0;
 
               if (endedSessionId) {
-                api("/session/" + sessionId + "/summary")
+                api("/session/" + endedSessionId + "/summary")
                   .then(function(summary) { showSummary(summary); })
                   .catch(function() { loadDashboard(); });
               } else {
