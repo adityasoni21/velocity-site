@@ -1265,13 +1265,16 @@
 
         if (state.token && state.user) {
           loadDashboard().catch(function(err) {
-            localStorage.clear()
+            localStorage.removeItem("v_token");
+            localStorage.removeItem("v_user");
             state.token = null;
             state.user = null;
-            window.location.href = "/velocity-site/index.html";
+            show("auth");
+            setAuthMode("signin");
           });
         } else {
-          window.location.href = "/velocity-site/index.html";
+          show("auth");
+          setAuthMode("signin");
         }
 
         document.getElementById("signout-btn").addEventListener("click", function() {
@@ -1279,7 +1282,8 @@
           localStorage.removeItem("v_user");
           state.token = null;
           state.user = null;
-          window.location.href = "/velocity-site/index.html";
+          show("auth");
+          setAuthMode("signin");
         })
       });
 
